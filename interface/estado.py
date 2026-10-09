@@ -31,6 +31,8 @@ from collections import deque
 SISTEMA_OFFLINE_S = 2.0      # sem atr/status há mais que isso -> "offline"
 MAX_EVENTOS = 500            # guarda só os últimos eventos
 JANELA_ENTREGAS_S = 60.0     # janela para "entregas por minuto"
+HISTORICO_S = 300            # histórico de bateria/distância: últimos 5 min
+AMOSTRA_HISTORICO_S = 1.0    # ... com uma amostra por segundo
 
 
 class Estado:
@@ -44,6 +46,8 @@ class Estado:
         self._ultima_resposta = None     # texto de atr/comando/resposta
         self._amostras_entregas = deque()  # (instante, entregues) da última janela
         self._direcoes = {}              # id do robô -> ângulo em graus (0 = direita)
+        self._historico = {}             # id -> deque de (instante, bateria, distância)
+        self._ultima_amostra = None      # instante da última amostra do histórico
 
     # ---------- Escrita (chamadas pela thread do MQTT) ----------
 
@@ -60,6 +64,7 @@ class Estado:
             # descarta amostras mais velhas que a janela
             while self._amostras_entregas[0][0] < agora - JANELA_ENTREGAS_S:
                 self._amostras_entregas.popleft()
+            self._amostrar_historico(status, agora)
             for r in status["robos"]:
                 dx, dy = r["sp_x"] - r["x"], r["sp_y"] - r["y"]
                 if dx != 0 or dy != 0:        # parado: mantém o ângulo anterior
@@ -71,6 +76,13 @@ class Estado:
 
     def guardar_evento(self, evento):
         with self._trava:
+            if evento["robo"] == -1 and evento["texto"] == "sistema iniciado":
+                # o sistema central foi (re)iniciado: os ids dos robôs serão
+                # reaproveitados, então esquece o que era da execução anterior
+                self._eventos.clear()
+                self._historico.clear()
+                self._direcoes.clear()
+                self._ultima_amostra = None
             self._eventos.append(evento)
 
     def guardar_resposta(self, texto):
@@ -97,8 +109,21 @@ class Estado:
                                    and agora - self._status_em <= SISTEMA_OFFLINE_S),
                 "entregas_por_minuto": self._entregas_por_minuto(),
                 "direcoes": dict(self._direcoes),
+                "historico": {rid: list(h) for rid, h in self._historico.items()},
             }
         return dados
+
+    def _amostrar_historico(self, status, agora):
+        """Uma amostra (instante, bateria, distância) por robô a cada
+        AMOSTRA_HISTORICO_S, guardando só os últimos HISTORICO_S segundos.
+        Chamada com a trava já pega."""
+        if self._ultima_amostra is not None and agora - self._ultima_amostra < AMOSTRA_HISTORICO_S:
+            return
+        self._ultima_amostra = agora
+        tamanho = int(HISTORICO_S / AMOSTRA_HISTORICO_S)
+        for r in status["robos"]:
+            h = self._historico.setdefault(r["id"], deque(maxlen=tamanho))
+            h.append((agora, r["bateria"], r["distancia"]))
 
     def _entregas_por_minuto(self):
         """Entregas na última janela, convertidas para "por minuto".

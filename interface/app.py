@@ -22,7 +22,7 @@ from estado import Estado
 from mqtt_cliente import ClienteMqtt
 from paineis.cabecalho import Cabecalho
 from paineis.mapa import PainelMapa
-from paineis.robos import TabelaRobos
+from paineis.robos import PainelDetalhe, PainelRobos
 
 PERIODO_TELA_S = 0.2   # mesmo período do atr/status
 
@@ -52,7 +52,34 @@ body {{ background: {cores.FUNDO}; color: {cores.TEXTO}; }}
 .chip-rotulo {{ color: {cores.TEXTO_FRACO}; font-size: .8rem; }}
 .painel {{ background: {cores.PAINEL}; border: 1px solid {cores.BORDA}; }}
 .painel-titulo {{ font-size: 1.1rem; font-weight: 600; }}
-.tabela {{ background: transparent; }}
+.grade-cards {{ display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }}
+.card-robo {{ background: {cores.PAINEL}; border: 1px solid {cores.BORDA}; border-left: 5px solid;
+              padding: 8px 10px; gap: 4px; cursor: pointer; }}
+.card-robo .botao-modo {{ min-width: 0; padding: 0 7px; font-size: .75rem; }}
+.uma-linha {{ white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }}
+.card-linha {{ color: {cores.TEXTO_FRACO}; font-size: .8rem; white-space: nowrap; overflow: hidden;
+               text-overflow: ellipsis; width: 100%; }}
+.card-robo.selecionado {{ outline: 2px solid #f8fafc; }}
+.card-titulo {{ font-family: Fredoka, sans-serif; font-size: 1.05rem; font-weight: 600; line-height: 1.1; }}
+.card-estado {{ font-weight: 600; font-size: .8rem; line-height: 1.1; }}
+.pilula-modo {{ border: 1px solid {cores.BORDA}; border-radius: 999px; padding: 1px 10px;
+                font-size: .75rem; color: {cores.TEXTO_FRACO}; }}
+.miniatura {{ line-height: 0; }}
+.bateria-txt {{ width: 3em; text-align: right; font-variant-numeric: tabular-nums; }}
+.card-info {{ font-size: .85rem; }}
+.rotulo-campo {{ color: {cores.TEXTO_FRACO}; }}
+.botao-modo {{ min-width: 72px; }}
+.campo-xy {{ width: 80px; }}
+.dica {{ color: {cores.TEXTO_FRACO}; font-size: .78rem; }}
+.dica-mapa {{ color: #fbbf24; font-size: .85rem; }}
+.detalhe {{ padding: 6px 4px; }}
+.detalhe-titulo {{ font-family: Fredoka, sans-serif; font-size: 1.5rem; font-weight: 600; }}
+.secao {{ color: {cores.TEXTO_FRACO}; font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; }}
+.resposta {{ color: #93c5fd; font-size: .8rem; }}
+.grafico {{ height: 190px; }}
+.evento-hora {{ color: {cores.TEXTO_FRACO}; font-variant-numeric: tabular-nums; font-size: .8rem; }}
+.evento-texto {{ font-size: .85rem; }}
+.q-drawer {{ background: {cores.PAINEL} !important; border-left: 1px solid {cores.BORDA}; }}
 .mapa {{ border-radius: 18px; overflow: hidden; }}
 .legenda-mapa {{ background: #f4f0e8; border-radius: 14px; padding: 4px 8px; overflow-x: auto; }}
 .legenda-mapa svg {{ max-width: 100%; height: auto; }}
@@ -62,16 +89,36 @@ body {{ background: {cores.FUNDO}; color: {cores.TEXTO}; }}
 @ui.page("/")
 def pagina():
     ui.add_css(CSS)
+    enviar = cliente_mqtt.enviar_comando
+    selecao = {"id": None}    # robô selecionado NESTA aba do navegador
+
+    def selecionar(rid):
+        selecao["id"] = rid
+        mapa.selecionado = rid
+        detalhe.selecionar(rid)
+        gaveta.show()
+
+    def fechar_detalhe():
+        selecao["id"] = None
+        mapa.selecionado = None
+        gaveta.hide()
+
+    # Gaveta da direita com o detalhe do robô selecionado (empurra a página,
+    # não cobre o mapa).
+    with ui.right_drawer(value=False, fixed=True).props("width=430") as gaveta:
+        detalhe = PainelDetalhe(fechar_detalhe, enviar)
     with ui.column().classes("w-full p-4 gap-4"):
         cabecalho = Cabecalho()
-        mapa = PainelMapa()
-        robos = TabelaRobos()
+        mapa = PainelMapa(selecionar, enviar)
+        robos = PainelRobos(selecionar, enviar)
 
     def atualizar():
         dados = estado.copia()   # cópia feita com a trava; o resto é fora dela
         cabecalho.atualizar(dados)
         mapa.atualizar(dados)
-        robos.atualizar(dados)
+        robos.atualizar(dados, selecao["id"])
+        if selecao["id"] is not None:
+            detalhe.atualizar(dados)
 
     atualizar()
     ui.timer(PERIODO_TELA_S, atualizar)

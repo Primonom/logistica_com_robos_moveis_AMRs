@@ -115,6 +115,18 @@ class TestMapaSvg(unittest.TestCase):
                          mapa_svg.animado("atr-pisca", "x", 4.25))
         self.assertIn("animation-delay: -0.25s", mapa_svg.animado("atr-pisca", "x", 3.25))
 
+    def test_clique_acha_o_robo_desenhado(self):
+        st = status(EQUIPE + [robo(5, 30, 10)], [CAIXA_EQUIPE])
+        pos = mapa_svg.posicoes_robos(st, {})
+        for rid, (x, y) in pos.items():          # clicar em cima de cada robô acha ele
+            self.assertEqual(mapa_svg.robo_no_ponto(x + 3, y - 3, st, {}), rid)
+        x, y = mapa_svg.centro(50, 25)           # chão vazio: ninguém
+        self.assertIsNone(mapa_svg.robo_no_ponto(x, y, st, {}))
+
+    def test_miniatura_valida(self):
+        for estado in ("DISPONIVEL", "DEFEITO", "RECARREGANDO", "MANUAL"):
+            ET.fromstring(mapa_svg.svg_miniatura_robo(estado))
+
     def test_texto_com_caracteres_especiais_fica_valido(self):
         mapa = dict(MAPA, zonas=[{"id": "<&>", "x": 56, "y": 4}])
         ET.fromstring(mapa_svg.svg_fundo(mapa))
