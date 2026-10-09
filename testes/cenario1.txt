@@ -1,0 +1,14 @@
+# Cenário 1: 1 robô, 1 caixa de tamanho 1.
+# Esperado: robô vai à baia 1, ergue, leva até a zona A (passando por P1
+# e P2) e solta. logs/cargas.csv recebe "1;1;A;0".
+# Rodar: ./logistica testes/sem_caixas.txt < testes/cenario1.txt
+novo
+aguarda 0 DISPONIVEL
+caixa 1 1 A
+aguarda 0 DESLOCANDO
+status
+aguarda 0 OPERANDO_CARGA
+status
+aguarda 0 DISPONIVEL 60
+status
+sair

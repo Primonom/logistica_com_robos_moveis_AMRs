@@ -1,0 +1,2 @@
+# Força fim de linha LF (Linux) — evita quebrar scripts e Makefile quando editados no Windows
+* text=auto eol=lf
