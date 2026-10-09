@@ -796,6 +796,45 @@ def equipe_carregando(membros, posicao, tamanho_caixa, ang, selecionado, agora=0
     return p
 
 
+# ---------- Para a interface: miniatura e posições desenhadas ----------
+
+def svg_miniatura_robo(estado, lado=56):
+    """O mesmo robô do mapa, sozinho, na cor do estado (para cards e para o
+    painel de detalhe)."""
+    r = {"id": 0, "estado": estado, "bateria": 100}
+    corpo = "".join(robo(r, (32, 32), 0, placa=False, bateria=False))
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{lado}" height="{lado}" '
+            f'viewBox="0 0 64 64">{d.defs_robo()}{ANIMACOES}{corpo}</svg>')
+
+
+def posicoes_robos(status, direcoes):
+    """{id: (x, y) em px} — onde cada robô aparece DESENHADO (com filas e
+    formações de equipe). O clique no mapa usa isto para saber em qual robô
+    o operador clicou."""
+    posicoes = {}
+    if status is None:
+        return posicoes
+    for (x, y), tipo, dados in _enfileirar(_unidades(status), direcoes or {}):
+        if tipo == "robo":
+            posicoes[dados["id"]] = (x, y)
+            continue
+        membros = sorted(dados[0], key=lambda r: r["id"])
+        for r, (dx, dy) in zip(membros, FORMACAO.get(len(membros), FORMACAO[4])):
+            posicoes[r["id"]] = (x + dx, y + dy)
+    return posicoes
+
+
+def robo_no_ponto(px_, py_, status, direcoes, alcance=ROBO * 0.6):
+    """Id do robô desenhado mais perto do ponto (px), se estiver ao alcance;
+    senão None."""
+    perto, melhor = None, alcance
+    for rid, (x, y) in posicoes_robos(status, direcoes).items():
+        dist = math.dist((x, y), (px_, py_))
+        if dist <= melhor:
+            perto, melhor = rid, dist
+    return perto
+
+
 # ---------- Legenda (mesmos desenhos, em miniatura) ----------
 
 def svg_legenda():

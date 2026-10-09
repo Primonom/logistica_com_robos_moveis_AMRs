@@ -197,5 +197,11 @@ def defs():
     return "<defs>" + "\n".join(partes) + "</defs>"
 
 
+def defs_robo():
+    """Só os símbolos do robô (corpo e LEDs): para as miniaturas dos cards,
+    que não precisam do <defs> inteiro do mapa."""
+    return "<defs>" + simbolo_robo() + simbolos_led() + "</defs>"
+
+
 NOMES_SIMBOLOS = ["robo", "led-ok", "led-defeito", "led-recarga", "led-manual", "caixa",
                   "palete", "carregador", "extintor", "quadro", "rosa", "bandeira"]
