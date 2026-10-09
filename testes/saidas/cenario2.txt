@@ -1,41 +1,41 @@
 Ponte MQTT: conectada ao broker localhost:1883
-Gestor: robo 0 criado (pid 4512) em (8,15)
-Gestor: robo 1 criado (pid 4513) em (5,15)
+Gestor: robo 0 criado (pid 5556) em (8,15)
+Gestor: robo 1 criado (pid 5557) em (5,15)
 Organizador: 2 robo(s) novo(s) na frota
-Gestor: robo 2 criado (pid 4514) em (30,15)
-Gestor: robo 3 criado (pid 4515) em (10,20)
-Robo 0 vivo (pid 4512)
-Robo 1 vivo (pid 4513)
-Robo 2 vivo (pid 4514)
-Robo 3 vivo (pid 4515)
+Gestor: robo 2 criado (pid 5558) em (30,15)
+Gestor: robo 3 criado (pid 5559) em (10,20)
+Robo 2 vivo (pid 5558)
+Robo 0 vivo (pid 5556)
+Robo 1 vivo (pid 5557)
+Robo 3 vivo (pid 5559)
 Console: robo 3 em DISPONIVEL
 Organizador: 2 robo(s) novo(s) na frota
 Organizador: caixa 1 (tam 3, baia 2 -> zona C): robos 1 0 3 indo para a baia
 Console: robo 1 em AGUARDANDO_EQUIPE
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   4512    DESLOCANDO         ( 3,13)  ( 3,11)   99%     7  auto  1
-1   4513    AGUARDANDO_EQUIPE  ( 3,11)  ( 3,11)   99%     6  auto  1
-2   4514    DISPONIVEL         (30,15)  (30,15)  100%     0  auto  -1
-3   4515    DESLOCANDO         ( 7,15)  ( 3,15)   99%     8  auto  1
+0   5556    DESLOCANDO         ( 3,13)  ( 3,11)   99%     7  auto  1
+1   5557    AGUARDANDO_EQUIPE  ( 3,11)  ( 3,11)   99%     6  auto  1
+2   5558    DISPONIVEL         (30,15)  (30,15)  100%     0  auto  -1
+3   5559    DESLOCANDO         ( 7,15)  ( 3,15)   99%     8  auto  1
 caixa 1   tam 3  baia 2 -> zona C  em andamento
 caixas entregues: 0
 Organizador: caixa 1: equipe completa na baia, ACOPLAR
 Console: robo 3 em OPERANDO_CARGA
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   4512    AGUARDANDO_EQUIPE  ( 3,11)  ( 3,11)   99%     9  auto  1
-1   4513    AGUARDANDO_EQUIPE  ( 3,11)  ( 3,11)   99%     6  auto  1
-2   4514    DISPONIVEL         (30,15)  (30,15)  100%     0  auto  -1
-3   4515    OPERANDO_CARGA     ( 3,11)  ( 3,11)   97%    16  auto  1
+0   5556    OPERANDO_CARGA     ( 3,11)  ( 3,11)   99%     9  auto  1
+1   5557    OPERANDO_CARGA     ( 3,11)  ( 3,11)   99%     6  auto  1
+2   5558    DISPONIVEL         (30,15)  (30,15)  100%     0  auto  -1
+3   5559    OPERANDO_CARGA     ( 3,11)  ( 3,11)   97%    16  auto  1
 caixa 1   tam 3  baia 2 -> zona C  em andamento
 caixas entregues: 0
 Organizador: caixa 1: erguida por todos, IR_ZONA C (lider 0)
 Organizador: caixa 1 entregue na zona C (robos 1 0 3)
 Console: robo 0 em DISPONIVEL
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   4512    DISPONIVEL         (56,18)  (56,18)   87%    69  auto  -1
-1   4513    DISPONIVEL         (56,18)  (56,18)   87%    66  auto  -1
-2   4514    DISPONIVEL         (30,15)  (30,15)  100%     0  auto  -1
-3   4515    DISPONIVEL         (56,18)  (56,18)   85%    76  auto  -1
+0   5556    DISPONIVEL         (56,18)  (56,18)   87%    69  auto  -1
+1   5557    OPERANDO_CARGA     (56,18)  (56,18)   87%    66  auto  -1
+2   5558    DISPONIVEL         (30,15)  (30,15)  100%     0  auto  -1
+3   5559    OPERANDO_CARGA     (56,18)  (56,18)   85%    76  auto  -1
 caixas entregues: 1
 Encerrando...
 Fim.

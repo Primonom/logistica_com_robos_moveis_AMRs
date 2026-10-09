@@ -38,7 +38,11 @@
  *     por isso escrevem no hw, com o mutex do robô travado, porque o
  *     simulador e o processo robo usam esses campos ao mesmo tempo.
  *   - goto/manual/auto: fila de mensagens do robô (enviar_para_robo abre e
- *     fecha a fila a cada envio; mq_send é atômico).
+ *     fecha a fila a cada envio; mq_send é atômico). Antes de enviar, goto
+ *     confere modo_automatico e manual confere e_estado (buffer de status),
+ *     com o mutex do robô, só para dar uma resposta clara ao operador; a
+ *     Navegação do robô continua conferindo de novo ao receber (o estado
+ *     pode mudar entre a conferência e a chegada da mensagem).
  *   - caixa: adicionar_caixa() usa mem->mutex_caixas (o Organizador mexe na
  *     mesma fila de caixas).
  *   - "aguarda" (só Console) lê o e_estado do buffer de status a cada
@@ -104,6 +108,15 @@ static Robo *robo_ativo(int id)
     ativo = mem->robos[id].ativo;
     pthread_mutex_unlock(&mem->robos[id].mutex);
     return ativo ? &mem->robos[id] : NULL;
+}
+
+/* Lê, com o mutex do robô, o modo e o estado (buffer de status). */
+static void ler_modo_estado(Robo *r, bool *automatico, Estado *estado)
+{
+    pthread_mutex_lock(&r->mutex);
+    *automatico = r->modo_automatico;
+    *estado = r->e_estado;
+    pthread_mutex_unlock(&r->mutex);
 }
 
 /* Comando "novo [x y]". */
@@ -217,13 +230,20 @@ static bool comando_goto(const char *linha, char *resp, int tam)
 {
     MensagemRobo msg;
     int id, x, y;
+    Robo *r;
+    bool automatico;
+    Estado estado;
 
     if (sscanf(linha, "goto %d %d %d", &id, &x, &y) != 3)
         return responder(false, resp, tam, "uso: goto <id> <x> <y>");
     if (!posicao_valida(x, y))
         return responder(false, resp, tam, "(%d,%d) fora do mapa ou dentro de passagem", x, y);
-    if (robo_ativo(id) == NULL)
+    r = robo_ativo(id);
+    if (r == NULL)
         return responder(false, resp, tam, "robo %d nao existe", id);
+    ler_modo_estado(r, &automatico, &estado);
+    if (automatico)
+        return responder(false, resp, tam, "robo em modo automatico");
 
     memset(&msg, 0, sizeof(msg));
     msg.tipo = GOTO;
@@ -239,11 +259,19 @@ static bool comando_modo(const char *linha, int tipo, char *resp, int tam)
     char comando[16];
     MensagemRobo msg;
     int id;
+    Robo *r;
+    bool automatico;
+    Estado estado;
 
     if (sscanf(linha, "%15s %d", comando, &id) != 2)
         return responder(false, resp, tam, "uso: manual <id> / auto <id>");
-    if (robo_ativo(id) == NULL)
+    r = robo_ativo(id);
+    if (r == NULL)
         return responder(false, resp, tam, "robo %d nao existe", id);
+    ler_modo_estado(r, &automatico, &estado);
+    if (tipo == MODO_MANUAL && estado != DISPONIVEL)
+        return responder(false, resp, tam, "robo nao esta DISPONIVEL (estado %s)",
+                         nome_estado(estado));
     memset(&msg, 0, sizeof(msg));
     msg.tipo = tipo;
     enviar_para_robo(id, &msg);
