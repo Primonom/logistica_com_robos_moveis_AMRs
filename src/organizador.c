@@ -407,6 +407,17 @@ static void formar_equipe(Equipe *e, Caixa c, int indice, int membros[])
 /* 2) Atribui caixas (primeira com baia livre) enquanto houver equipe
  * completa. Cada caixa atribuída ocupa a baia dela, então a próxima volta
  * do laço já pula essa baia. */
+/* Publica na memória compartilhada qual caixa está esperando equipe (-1 =
+ * nenhuma) e quantos robôs livres havia: só para a Tela de Operação mostrar
+ * o motivo da espera. */
+static void informar_espera(int caixa_id, int livres)
+{
+    pthread_mutex_lock(&mem->mutex_caixas);
+    mem->caixa_em_espera = caixa_id;
+    mem->robos_livres_espera = livres;
+    pthread_mutex_unlock(&mem->mutex_caixas);
+}
+
 static void atribuir_caixas(void)
 {
     int membros[TAMANHO_MAX_CAIXA];
@@ -418,6 +429,7 @@ static void atribuir_caixas(void)
         n = escolher_robos(c.tamanho, BAIA_X[c.baia - 1], BAIA_Y[c.baia - 1], membros);
         if (n < c.tamanho) {
             /* Equipe incompleta: NÃO reserva ninguém e a fila espera. */
+            informar_espera(c.id, n);
             if (ultima_avisada != c.id) {
                 snprintf(texto, sizeof(texto), "caixa %d (tam %d) aguardando equipe: %d robo(s) livre(s)",
                          c.id, c.tamanho, n);
@@ -428,6 +440,7 @@ static void atribuir_caixas(void)
         }
         formar_equipe(&equipes[c.baia - 1], c, indice, membros);
     }
+    informar_espera(-1, 0);   /* nenhuma caixa esperando equipe */
 }
 
 void *tarefa_organizador(void *arg)

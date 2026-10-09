@@ -15,7 +15,9 @@
  *               única da verdade). "Retained": o broker guarda a última
  *               cópia e entrega a quem assinar depois. Publicado a cada
  *               conexão.
- *   atr/status  (publica) JSON com robôs, caixas, passagens e contadores.
+ *   atr/status  (publica) JSON com robôs, caixas, passagens, a caixa que o
+ *               Organizador está esperando (e quantos robôs livres havia) e
+ *               contadores.
  *   atr/comando (assina) uma linha de comando igual à do Console; é
  *               executada por executar_comando() (console.c) na thread de
  *               rede da biblioteca, e o resultado vai para
@@ -211,14 +213,17 @@ static int json_robos(Json *j, const Caixa caixas[], int n_caixas)
     return n;
 }
 
-/* Copia a fila de caixas com o mutex; o resto usa só a cópia. */
-static int copiar_caixas(Caixa caixas[])
+/* Copia a fila de caixas (e quem está esperando equipe) com o mutex; o
+ * resto usa só a cópia. */
+static int copiar_caixas(Caixa caixas[], int *em_espera, int *livres)
 {
     int n;
 
     pthread_mutex_lock(&mem->mutex_caixas);
     n = mem->n_caixas;
     memcpy(caixas, mem->caixas, n * sizeof(Caixa));
+    *em_espera = mem->caixa_em_espera;
+    *livres = mem->robos_livres_espera;
     pthread_mutex_unlock(&mem->mutex_caixas);
     return n;
 }
@@ -268,17 +273,19 @@ static void publicar_status(struct mosquitto *mosq, sem_t *semaforos[])
     Caixa caixas[MAX_CAIXAS];
     struct timespec agora;
     char data_hora[48];
-    int n_caixas, ativos, pendentes, andamento, entregues;
+    int n_caixas, ativos, pendentes, andamento, entregues, em_espera, livres;
 
     clock_gettime(CLOCK_REALTIME, &agora);
     formatar_data_hora(agora, data_hora, sizeof(data_hora));
 
     j.usado = 0;
     json_add(&j, "{\"t\":\"%s\",", data_hora);
-    n_caixas = copiar_caixas(caixas);
+    n_caixas = copiar_caixas(caixas, &em_espera, &livres);
     ativos = json_robos(&j, caixas, n_caixas);
     json_caixas(&j, caixas, n_caixas, &pendentes, &andamento, &entregues);
     json_passagens(&j, semaforos);
+    json_add(&j, ",\"organizador\":{\"caixa_em_espera\":%d,\"robos_livres\":%d}",
+             em_espera, livres);
     json_add(&j, ",\"contadores\":{\"robos_ativos\":%d,\"entregues\":%d,"
              "\"pendentes\":%d,\"em_andamento\":%d}}",
              ativos, entregues, pendentes, andamento);

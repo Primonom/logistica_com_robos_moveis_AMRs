@@ -61,6 +61,8 @@ MemoriaCompartilhada *criar_memoria(void)
     }
     iniciar_mutex_compartilhado(&m->mutex_caixas);
     m->n_caixas = 0;
+    m->caixa_em_espera = -1;
+    m->robos_livres_espera = 0;
     atomic_init(&m->encerrar, false);
     return m;
 }

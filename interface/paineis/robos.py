@@ -327,20 +327,8 @@ class PainelDetalhe:
             if not meus:
                 ui.label("Nenhum evento ainda.").classes("texto-fraco")
             for e in reversed(meus[-14:]):
-                cor = _cor_evento(e["texto"])
+                cor = cores.CATEGORIAS_EVENTO[cores.categoria_evento(e)]["cor"]
                 with ui.row().classes("items-start no-wrap gap-2 w-full"):
                     ui.icon("circle").style(f"color: {cor}; font-size: 10px; margin-top: 5px")
                     ui.label(e["data_hora"][11:19]).classes("evento-hora")
                     ui.label(e["texto"]).classes("evento-texto")
-
-
-def _cor_evento(texto):
-    """Cor do pontinho na linha do tempo (só aparência)."""
-    t = texto.lower()
-    if "defeito" in t:
-        return cores.ERRO
-    if "bateria" in t or "recarga" in t:
-        return "#06b6d4"
-    if "passagem" in t:
-        return cores.ALERTA
-    return "#64748b"
