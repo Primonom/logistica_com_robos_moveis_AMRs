@@ -1,0 +1,5 @@
+# Só para desenvolvimento: screenshots automáticos da tela (Playwright headless).
+# Não é necessário para rodar o sistema.
+#   interface/.venv/bin/pip install -r interface/requirements-dev.txt
+#   interface/.venv/bin/playwright install chromium
+playwright==1.63.0
