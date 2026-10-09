@@ -104,6 +104,8 @@ bool adicionar_caixa(int id, int tamanho, int baia, int zona)
         mem->caixas[mem->n_caixas].baia = baia;
         mem->caixas[mem->n_caixas].zona = zona;
         mem->caixas[mem->n_caixas].status = CAIXA_ESPERANDO;
+        mem->caixas[mem->n_caixas].n_robos = 0;   /* ainda sem equipe */
+        mem->caixas[mem->n_caixas].lider = -1;
         mem->n_caixas++;
         ok = true;
     }
@@ -380,8 +382,14 @@ static void formar_equipe(Equipe *e, Caixa c, int indice, int membros[])
     e->pausada = false;
     marcar_carga(e, c.id);
 
+    /* Status e equipe mudam juntos, sob o mesmo lock: quem lê a caixa
+     * (Console, ponte MQTT) nunca vê EM_ANDAMENTO sem a equipe. */
     pthread_mutex_lock(&mem->mutex_caixas);
     mem->caixas[indice].status = CAIXA_EM_ANDAMENTO;
+    mem->caixas[indice].n_robos = e->n;
+    mem->caixas[indice].lider = e->lider;
+    for (k = 0; k < e->n; k++)
+        mem->caixas[indice].robos[k] = e->membros[k];
     pthread_mutex_unlock(&mem->mutex_caixas);
 
     msg.tipo = TAREFA_IR_BAIA;

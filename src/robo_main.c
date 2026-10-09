@@ -27,7 +27,7 @@ MemoriaCompartilhada *mem;
 mqd_t fila_coletor;
 int id_robo;
 EstadoLocal estado_local = { PTHREAD_MUTEX_INITIALIZER, DISPONIVEL, DISPONIVEL,
-                              false, false, 0, 0 };
+                              false, false, 0, 0, -1, -1 };
 
 int main(int argc, char *argv[])
 {

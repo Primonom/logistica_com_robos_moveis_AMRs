@@ -49,7 +49,8 @@
  *     Status dele no meio de uma atualização. Os dois mutexes (líder e o
  *     meu) nunca ficam travados ao mesmo tempo: sem risco de deadlock.
  *   - estado_local.mutex: troca de informação com a Status (outra thread):
- *     estado, e as flags parar e ir_recarregar que a Status liga.
+ *     estado e destino da rota (que a Status publica no buffer), e as flags
+ *     parar e ir_recarregar que a Status liga.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -114,6 +115,16 @@ static Estado ler_estado(void)
     e = estado_local.estado;
     pthread_mutex_unlock(&estado_local.mutex);
     return e;
+}
+
+/* Informa à Status o fim da rota atual (-1, -1 = sem rota), para ela
+ * publicar no buffer de status (a tela desenha a linha até lá). */
+static void publicar_destino(int x, int y)
+{
+    pthread_mutex_lock(&estado_local.mutex);
+    estado_local.destino_x = x;
+    estado_local.destino_y = y;
+    pthread_mutex_unlock(&estado_local.mutex);
 }
 
 /* Escreve o comando da garra no hw (o simulador lê). */
@@ -213,6 +224,7 @@ static void tratar_mensagem(const MensagemRobo *m)
         rota.n = 0;
         indice = 0;
         tem_destino = false;
+        publicar_destino(-1, -1);
         definir_estado(DISPONIVEL);
         registrar_evento(fila_coletor, id_robo, "carga solta");
         break;
@@ -257,15 +269,19 @@ static void verificar_acoplamento(void)
 }
 
 /* 3a) Seguidor: copia o setpoint do líder (lido do buffer de status dele).
- * Não usa semáforos: quem ocupa a vaga na passagem é o líder. */
+ * Não usa semáforos: quem ocupa a vaga na passagem é o líder. O destino
+ * publicado é o do líder (a equipe vai para o mesmo lugar). */
 static void seguir_lider(void)
 {
-    int x, y;
+    int x, y, dx, dy;
 
     pthread_mutex_lock(&mem->robos[lider].mutex);
     x = mem->robos[lider].j_sp_posicao_x;
     y = mem->robos[lider].j_sp_posicao_y;
+    dx = mem->robos[lider].destino_x;
+    dy = mem->robos[lider].destino_y;
     pthread_mutex_unlock(&mem->robos[lider].mutex);
+    publicar_destino(dx, dy);
 
     pthread_mutex_lock(&mem->robos[id_robo].mutex);
     mem->robos[id_robo].hw.o_sp_posicao_x = x;
@@ -290,6 +306,7 @@ static void iniciar_rota_pendente(void)
     calcular_rota(x, y, destino_x, destino_y, &rota);
     indice = 0;
     tem_destino = false;
+    publicar_destino(destino_x, destino_y);
 }
 
 /* Tenta pegar o semáforo da passagem p, esperando no máximo
@@ -347,6 +364,7 @@ static void seguir_rota(void)
     }
     indice++;
     if (indice == rota.n) {
+        publicar_destino(-1, -1);
         definir_estado(estado_ao_chegar);
         registrar_evento(fila_coletor, id_robo, "chegou ao destino");
     }

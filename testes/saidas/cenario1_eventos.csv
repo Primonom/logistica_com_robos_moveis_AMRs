@@ -1,20 +1,20 @@
-2026-10-09 10:52:04.743;-1;sistema iniciado
-2026-10-09 10:52:04.744;0;robo criado (pid 3770) em (25,15)
-2026-10-09 10:52:04.745;-1;1 robo(s) novo(s) na frota
-2026-10-09 10:52:04.746;0;robo vivo
-2026-10-09 10:52:05.246;-1;caixa 1 (tam 1, baia 1 -> zona A): robos 0 indo para a baia
-2026-10-09 10:52:05.247;0;tarefa: ir para a baia (caixa 1)
-2026-10-09 10:52:06.247;0;entrou na passagem P1
-2026-10-09 10:52:06.647;0;saiu da passagem P1
-2026-10-09 10:52:08.947;0;chegou ao destino
-2026-10-09 10:52:09.246;-1;caixa 1: equipe completa na baia, ACOPLAR
-2026-10-09 10:52:09.347;0;carga erguida
-2026-10-09 10:52:09.747;-1;caixa 1: erguida por todos, IR_ZONA A (lider 0)
-2026-10-09 10:52:12.047;0;entrou na passagem P1
-2026-10-09 10:52:12.447;0;saiu da passagem P1
-2026-10-09 10:52:14.747;0;entrou na passagem P2
-2026-10-09 10:52:15.147;0;saiu da passagem P2
-2026-10-09 10:52:17.847;0;chegou ao destino
-2026-10-09 10:52:18.246;-1;caixa 1 entregue na zona A (robos 0)
-2026-10-09 10:52:18.247;0;carga solta
-2026-10-09 10:52:18.746;-1;sistema encerrado
+2026-10-09 11:01:52.433;-1;sistema iniciado
+2026-10-09 11:01:52.434;0;robo criado (pid 4479) em (25,15)
+2026-10-09 11:01:52.435;-1;1 robo(s) novo(s) na frota
+2026-10-09 11:01:52.436;0;robo vivo
+2026-10-09 11:01:52.936;0;tarefa: ir para a baia (caixa 1)
+2026-10-09 11:01:52.968;-1;caixa 1 (tam 1, baia 1 -> zona A): robos 0 indo para a baia
+2026-10-09 11:01:53.936;0;entrou na passagem P1
+2026-10-09 11:01:54.336;0;saiu da passagem P1
+2026-10-09 11:01:56.636;0;chegou ao destino
+2026-10-09 11:01:56.948;-1;caixa 1: equipe completa na baia, ACOPLAR
+2026-10-09 11:01:57.036;0;carga erguida
+2026-10-09 11:01:57.436;-1;caixa 1: erguida por todos, IR_ZONA A (lider 0)
+2026-10-09 11:02:00.474;0;entrou na passagem P1
+2026-10-09 11:02:00.874;0;saiu da passagem P1
+2026-10-09 11:02:03.174;0;entrou na passagem P2
+2026-10-09 11:02:03.574;0;saiu da passagem P2
+2026-10-09 11:02:06.274;0;chegou ao destino
+2026-10-09 11:02:06.674;0;carga solta
+2026-10-09 11:02:06.714;-1;caixa 1 entregue na zona A (robos 0)
+2026-10-09 11:02:07.173;-1;sistema encerrado

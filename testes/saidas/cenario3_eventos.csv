@@ -1,40 +1,40 @@
-2026-10-09 10:52:29.519;-1;sistema iniciado
-2026-10-09 10:52:29.520;0;robo criado (pid 3827) em (5,15)
-2026-10-09 10:52:29.521;1;robo criado (pid 3828) em (6,15)
-2026-10-09 10:52:29.523;2;robo criado (pid 3829) em (30,20)
-2026-10-09 10:52:29.524;-1;3 robo(s) novo(s) na frota
-2026-10-09 10:52:29.528;1;robo vivo
-2026-10-09 10:52:29.528;0;robo vivo
-2026-10-09 10:52:29.529;2;robo vivo
-2026-10-09 10:52:30.024;-1;caixa 1 (tam 2, baia 2 -> zona C): robos 0 1 indo para a baia
-2026-10-09 10:52:30.028;1;tarefa: ir para a baia (caixa 1)
-2026-10-09 10:52:30.029;0;tarefa: ir para a baia (caixa 1)
-2026-10-09 10:52:30.829;0;chegou ao destino
-2026-10-09 10:52:30.928;1;chegou ao destino
-2026-10-09 10:52:31.524;-1;caixa 1: equipe completa na baia, ACOPLAR
-2026-10-09 10:52:31.628;1;carga erguida
-2026-10-09 10:52:31.629;0;carga erguida
-2026-10-09 10:52:32.024;-1;caixa 1: erguida por todos, IR_ZONA C (lider 0)
-2026-10-09 10:52:32.028;1;seguindo o lider 0
-2026-10-09 10:52:33.629;0;entrou na passagem P1
-2026-10-09 10:52:33.928;1;DEFEITO: robo parado
-2026-10-09 10:52:34.024;-1;caixa 1: robo da equipe em DEFEITO, PAUSAR
-2026-10-09 10:52:34.028;1;pausado (equipe com defeito)
-2026-10-09 10:52:34.029;0;pausado (equipe com defeito)
-2026-10-09 10:52:35.128;1;defeito resolvido
-2026-10-09 10:52:35.524;-1;caixa 1: defeito resolvido, CONTINUAR
-2026-10-09 10:52:35.528;1;continuando
-2026-10-09 10:52:35.529;0;continuando
-2026-10-09 10:52:35.529;0;saiu da passagem P1
-2026-10-09 10:52:38.611;0;entrou na passagem P2
-2026-10-09 10:52:39.011;0;saiu da passagem P2
-2026-10-09 10:52:40.911;0;chegou ao destino
-2026-10-09 10:52:41.306;-1;caixa 1 entregue na zona C (robos 0 1)
-2026-10-09 10:52:41.310;1;carga solta
-2026-10-09 10:52:41.311;0;carga solta
-2026-10-09 10:52:41.511;0;bateria baixa: indo recarregar
-2026-10-09 10:52:43.311;0;entrou na passagem P3
-2026-10-09 10:52:44.511;0;saiu da passagem P3
-2026-10-09 10:52:44.611;0;chegou ao destino
-2026-10-09 10:52:48.911;0;recarga completa: disponivel
-2026-10-09 10:52:49.306;-1;sistema encerrado
+2026-10-09 11:02:17.779;-1;sistema iniciado
+2026-10-09 11:02:17.781;0;robo criado (pid 4541) em (5,15)
+2026-10-09 11:02:17.782;1;robo criado (pid 4542) em (6,15)
+2026-10-09 11:02:17.782;2;robo criado (pid 4543) em (30,20)
+2026-10-09 11:02:17.783;-1;3 robo(s) novo(s) na frota
+2026-10-09 11:02:17.784;0;robo vivo
+2026-10-09 11:02:17.785;1;robo vivo
+2026-10-09 11:02:17.785;2;robo vivo
+2026-10-09 11:02:18.284;-1;caixa 1 (tam 2, baia 2 -> zona C): robos 0 1 indo para a baia
+2026-10-09 11:02:18.285;0;tarefa: ir para a baia (caixa 1)
+2026-10-09 11:02:18.285;1;tarefa: ir para a baia (caixa 1)
+2026-10-09 11:02:19.085;0;chegou ao destino
+2026-10-09 11:02:19.185;1;chegou ao destino
+2026-10-09 11:02:19.783;-1;caixa 1: equipe completa na baia, ACOPLAR
+2026-10-09 11:02:19.885;0;carga erguida
+2026-10-09 11:02:19.885;1;carga erguida
+2026-10-09 11:02:20.283;-1;caixa 1: erguida por todos, IR_ZONA C (lider 0)
+2026-10-09 11:02:20.285;1;seguindo o lider 0
+2026-10-09 11:02:21.885;0;entrou na passagem P1
+2026-10-09 11:02:22.185;1;DEFEITO: robo parado
+2026-10-09 11:02:22.284;-1;caixa 1: robo da equipe em DEFEITO, PAUSAR
+2026-10-09 11:02:22.285;0;pausado (equipe com defeito)
+2026-10-09 11:02:22.285;1;pausado (equipe com defeito)
+2026-10-09 11:02:23.385;1;defeito resolvido
+2026-10-09 11:02:23.783;-1;caixa 1: defeito resolvido, CONTINUAR
+2026-10-09 11:02:23.785;0;continuando
+2026-10-09 11:02:23.785;0;saiu da passagem P1
+2026-10-09 11:02:23.785;1;continuando
+2026-10-09 11:02:26.085;0;entrou na passagem P2
+2026-10-09 11:02:26.485;0;saiu da passagem P2
+2026-10-09 11:02:28.385;0;chegou ao destino
+2026-10-09 11:02:28.783;-1;caixa 1 entregue na zona C (robos 0 1)
+2026-10-09 11:02:28.785;0;carga solta
+2026-10-09 11:02:28.785;1;carga solta
+2026-10-09 11:02:28.985;0;bateria baixa: indo recarregar
+2026-10-09 11:02:30.785;0;entrou na passagem P3
+2026-10-09 11:02:31.985;0;saiu da passagem P3
+2026-10-09 11:02:32.813;0;chegou ao destino
+2026-10-09 11:02:37.113;0;recarga completa: disponivel
+2026-10-09 11:02:37.511;-1;sistema encerrado

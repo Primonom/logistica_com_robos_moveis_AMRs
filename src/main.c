@@ -122,6 +122,7 @@ int main(int argc, char *argv[])
     mem = criar_memoria();
     fila_coletor = criar_fila_coletor();
     criar_semaforos();
+    ponte_criar(); /* antes das threads: o Coletor e a ponte usam o cliente */
 
     criar_thread(&th_coletor, tarefa_coletor, NULL, "coletor");
     registrar_evento(fila_coletor, -1, "sistema iniciado");
@@ -156,6 +157,7 @@ int main(int argc, char *argv[])
     /* 4. Remove os objetos de IPC. */
     mq_close(fila_coletor);
     if (mq_unlink(NOME_FILA_COLETOR) == -1) perror("mq_unlink coletor");
+    ponte_destruir(); /* depois do Coletor: ele publica até o último evento */
     remover_semaforos();
     destruir_memoria(mem);
     printf("Fim.\n");
