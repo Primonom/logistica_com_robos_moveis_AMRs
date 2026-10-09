@@ -104,6 +104,8 @@ typedef struct {
     int      bateria;                         /* em % */
     Estado   e_estado;
     double   distancia_total;
+    int      destino_x, destino_y;  /* fim da rota atual (-1 = sem rota);
+                                     * a tela desenha a linha até ele */
 
     bool     modo_automatico;
     int      carga_id;         /* -1 se nenhuma */
@@ -130,6 +132,11 @@ typedef struct {
     int baia;      /* 1 a 4 */
     int zona;      /* 0 a 3 = zonas A a D */
     int status;    /* um valor de StatusCaixa */
+    /* Equipe (preenchida pelo Organizador ao formar a equipe; fica
+     * guardada depois da entrega, como histórico). */
+    int robos[TAMANHO_MAX_CAIXA];
+    int n_robos;   /* 0 = ainda sem equipe */
+    int lider;     /* -1 = sem equipe */
 } Caixa;
 
 /* Conteúdo completo de /atr_shm. */
@@ -235,7 +242,10 @@ void *tarefa_organizador(void *arg); /* thread; arg = nome do arquivo de caixas 
 bool adicionar_caixa(int id, int tamanho, int baia, int zona); /* id < 0: automático */
 
 /* ---------- ponte_mqtt.c (processo central, Etapa 2) ---------- */
+void ponte_criar(void);              /* main, ANTES de criar as threads */
 void *tarefa_ponte_mqtt(void *arg);  /* thread (arg não usado) */
+void ponte_publicar(const char *topico, const char *texto); /* qualquer thread */
+void ponte_destruir(void);           /* main, DEPOIS de todas terminarem */
 
 /* ---------- sim_stub.c (processo central, só Etapa 1) ---------- */
 void *tarefa_simulador(void *arg);   /* thread (arg não usado) */
@@ -254,6 +264,8 @@ typedef struct {
     bool   parar;            /* Status -> Navegação: DEFEITO, segure a posição */
     bool   ir_recarregar;    /* Status -> Navegação: vá para a estação */
     int    recarga_x, recarga_y;  /* estação escolhida pela Status */
+    int    destino_x, destino_y;  /* Navegação -> Status: fim da rota atual
+                                   * (-1 = sem rota), publicado no buffer */
 } EstadoLocal;
 
 extern EstadoLocal estado_local;
@@ -263,7 +275,9 @@ void *tarefa_status(void *arg);      /* thread (arg não usado) */
 void *tarefa_navegacao(void *arg);   /* thread (arg não usado) */
 
 /* ---------- console.c ---------- */
+#define TAMANHO_RESPOSTA 8192        /* cabe a tabela do "status" inteira */
 void executar_console(void);         /* roda na thread principal */
+bool executar_comando(const char *linha, char *resp, int tam); /* Console e ponte MQTT */
 const char *nome_estado(Estado e);
 
 #endif

@@ -3,10 +3,14 @@
  *
  * Thread: tarefa_coletor (uma só, no processo central).
  *   Fica bloqueada em mq_receive na fila /atr_coletor. Para cada mensagem,
- *   grava uma linha com data e hora em logs/eventos.csv ou logs/cargas.csv.
+ *   grava uma linha com data e hora em logs/eventos.csv ou logs/cargas.csv
+ *   e, depois de gravar, publica o registro no tópico MQTT "atr/eventos"
+ *   (para a Tela de Operação; se o broker não estiver no ar, a publicação
+ *   é simplesmente descartada).
  *
- * Funções de envio (registrar_evento, registrar_carga, pedir_fim_coletor):
- *   chamadas por QUALQUER thread de QUALQUER processo (central ou robo).
+ * As funções de ENVIO (registrar_evento, registrar_carga, pedir_fim_coletor)
+ * ficam em eventos.c, porque são usadas pelos dois processos (central e
+ * robo); este arquivo é só do processo central.
  *
  * Sincronização: a fila de mensagens POSIX /atr_coletor.
  *   - É um problema produtor-consumidor: muitos produtores (as tarefas que
@@ -23,6 +27,34 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include "comum.h"
+
+/* Copia "texto" para "saida" escapando aspas e barras invertidas, para o
+ * texto poder ir dentro de uma string JSON. */
+static void escapar_json(const char *texto, char *saida, int tamanho)
+{
+    int i, j = 0;
+
+    for (i = 0; texto[i] != '\0' && j < tamanho - 2; i++) {
+        if (texto[i] == '"' || texto[i] == '\\')
+            saida[j++] = '\\';
+        saida[j++] = texto[i];
+    }
+    saida[j] = '\0';
+}
+
+/* Publica o registro em atr/eventos:
+ * {"data_hora":"...","robo":N,"tipo":"evento"|"carga","texto":"..."} */
+static void publicar_evento(const char *data_hora, const MensagemColetor *msg)
+{
+    char texto[2 * sizeof(msg->texto)];
+    char json[512];
+
+    escapar_json(msg->texto, texto, sizeof(texto));
+    snprintf(json, sizeof(json),
+             "{\"data_hora\":\"%s\",\"robo\":%d,\"tipo\":\"%s\",\"texto\":\"%s\"}",
+             data_hora, msg->robo_id, msg->tipo == COLETOR_CARGA ? "carga" : "evento", texto);
+    ponte_publicar("atr/eventos", json);
+}
 
 /* Converte o timestamp em texto "AAAA-MM-DD HH:MM:SS.mmm".
  * Também usada pela ponte MQTT (campo "t" do atr/status). */
@@ -83,45 +115,10 @@ void *tarefa_coletor(void *arg)
             fprintf(eventos, "%s;%d;%s\n", data_hora, msg.robo_id, msg.texto);
             fflush(eventos); /* grava já: não perde o log se o programa cair */
         }
+        publicar_evento(data_hora, &msg); /* depois de gravar */
     }
 
     fclose(eventos);
     fclose(cargas);
     return NULL;
-}
-
-/* Monta a mensagem (com o horário de AGORA) e coloca na fila. */
-static void enviar_coletor(mqd_t fila, int tipo, int robo_id, const char *texto)
-{
-    MensagemColetor msg;
-
-    memset(&msg, 0, sizeof(msg));
-    msg.tipo = tipo;
-    clock_gettime(CLOCK_REALTIME, &msg.quando); /* hora real do evento */
-    msg.robo_id = robo_id;
-    strncpy(msg.texto, texto, sizeof(msg.texto) - 1);
-
-    if (mq_send(fila, (const char *)&msg, sizeof(msg), 0) == -1) {
-        perror("mq_send coletor");
-        exit(1);
-    }
-}
-
-/* Evento de um robô (ou do sistema, com robo_id = -1). */
-void registrar_evento(mqd_t fila, int robo_id, const char *texto)
-{
-    enviar_coletor(fila, COLETOR_EVENTO, robo_id, texto);
-}
-
-/* Carga entregue. texto = "caixa;baia;zona;robos". */
-void registrar_carga(mqd_t fila, const char *texto)
-{
-    enviar_coletor(fila, COLETOR_CARGA, -1, texto);
-}
-
-/* Pede para a thread Coletor terminar. Como a fila é FIFO, ela ainda
- * grava todas as mensagens enviadas antes desta. */
-void pedir_fim_coletor(mqd_t fila)
-{
-    enviar_coletor(fila, COLETOR_FIM, -1, "");
 }

@@ -10,11 +10,24 @@
  *     sozinha se o broker cair. Os callbacks (ao_conectar, ao_desconectar)
  *     rodam NELA.
  *
- * Tópicos publicados (passo 9):
- *   atr/mapa    JSON do mapa, gerado a partir de mapa.h (fonte única da
- *               verdade). "Retained": o broker guarda a última cópia e
- *               entrega a quem assinar depois. Publicado a cada conexão.
- *   atr/status  JSON com robôs, caixas, passagens e contadores.
+ * Tópicos:
+ *   atr/mapa    (publica) JSON do mapa, gerado a partir de mapa.h (fonte
+ *               única da verdade). "Retained": o broker guarda a última
+ *               cópia e entrega a quem assinar depois. Publicado a cada
+ *               conexão.
+ *   atr/status  (publica) JSON com robôs, caixas, passagens e contadores.
+ *   atr/comando (assina) uma linha de comando igual à do Console; é
+ *               executada por executar_comando() (console.c) na thread de
+ *               rede da biblioteca, e o resultado vai para
+ *   atr/comando/resposta (publica) "ok", a saída do comando, ou
+ *               "erro: <mensagem>".
+ *   atr/eventos (publicado pelo Coletor, via ponte_publicar()).
+ *
+ * Ciclo de vida do cliente MQTT (um só, compartilhado):
+ *   ponte_criar()    main, ANTES de criar as threads
+ *   tarefa_ponte_mqtt  conecta e publica o status
+ *   ponte_destruir() main, DEPOIS de todas as threads terminarem (o Coletor
+ *                    publica até o último evento, "sistema encerrado").
  *
  * O núcleo NÃO depende da tela: se o broker não estiver no ar, a ponte só
  * avisa e o resto do sistema continua igual (as publicações sem conexão
@@ -30,9 +43,16 @@
  *   - sem_getvalue nos semáforos das passagens: é só uma leitura instantânea
  *     para EXIBIÇÃO (o valor pode mudar logo depois); não serve para decidir
  *     nada, e por isso não precisa de proteção extra.
- *   - libmosquitto: mosquitto_publish pode ser chamado desta thread enquanto
- *     a thread de rede da biblioteca roda; a biblioteca protege as filas
- *     internas dela com mutexes próprios.
+ *   - libmosquitto: mosquitto_publish pode ser chamado desta thread, do
+ *     Coletor e da thread de rede ao mesmo tempo; a biblioteca protege as
+ *     filas internas dela com mutexes próprios.
+ *   - "cliente" e "rede_iniciada" são globais deste arquivo, mas sem mutex:
+ *     "cliente" é escrito só em ponte_criar(), antes de existirem as outras
+ *     threads (pthread_create garante que elas veem o valor), e só é
+ *     destruído depois de todas terminarem; "rede_iniciada" é escrito só
+ *     pela thread da ponte e lido pelo main depois do pthread_join dela.
+ *   - Comandos recebidos: executar_comando() é segura para ser chamada ao
+ *     mesmo tempo pelo Console e por aqui (ver console.c).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,6 +69,9 @@
 #define MANTER_VIVO_S   10      /* keepalive do MQTT, em segundos */
 #define TAMANHO_JSON    16384   /* cabe 16 robôs + 64 caixas com folga */
 #define CICLOS_ENTRE_TENTATIVAS 10  /* 10 x 200 ms = tenta conectar a cada 2 s */
+
+static struct mosquitto *cliente = NULL;  /* ver "Sincronização" no topo */
+static bool rede_iniciada = false;
 
 /* Texto JSON sendo montado aos pedaços. */
 typedef struct {
@@ -136,8 +159,20 @@ static const char *nome_status_caixa(int status)
     return "ENTREGUE";
 }
 
-/* Robôs ativos, lidos SÓ do buffer de status. Retorna quantos são. */
-static int json_robos(Json *j)
+/* Líder da equipe que leva a caixa "carga_id" (-1 se não há). */
+static int lider_da_carga(int carga_id, const Caixa caixas[], int n_caixas)
+{
+    int i;
+
+    for (i = 0; i < n_caixas; i++)
+        if (caixas[i].id == carga_id)
+            return caixas[i].lider;
+    return -1;
+}
+
+/* Robôs ativos, lidos SÓ do buffer de status. Retorna quantos são.
+ * "caixas" é a cópia feita antes, usada só para achar o líder. */
+static int json_robos(Json *j, const Caixa caixas[], int n_caixas)
 {
     Robo r;   /* cópia local do slot */
     int i, n = 0;
@@ -151,34 +186,47 @@ static int json_robos(Json *j)
             continue;
         /* Daqui para baixo só a cópia (r) é usada, já fora do mutex. */
         json_add(j, "%s{\"id\":%d,\"estado\":\"%s\",\"modo\":\"%s\",\"x\":%d,\"y\":%d,"
-                 "\"sp_x\":%d,\"sp_y\":%d,\"bateria\":%d,\"distancia\":%.0f,\"carga\":%d}",
+                 "\"sp_x\":%d,\"sp_y\":%d,\"destino_x\":%d,\"destino_y\":%d,"
+                 "\"bateria\":%d,\"distancia\":%.0f,\"carga\":%d,\"lider\":%d}",
                  n > 0 ? "," : "", i, nome_estado(r.e_estado),
                  r.modo_automatico ? "auto" : "manual", r.e_posicao_x, r.e_posicao_y,
-                 r.j_sp_posicao_x, r.j_sp_posicao_y, r.bateria, r.distancia_total,
-                 r.carga_id);
+                 r.j_sp_posicao_x, r.j_sp_posicao_y, r.destino_x, r.destino_y,
+                 r.bateria, r.distancia_total, r.carga_id,
+                 r.carga_id == -1 ? -1 : lider_da_carga(r.carga_id, caixas, n_caixas));
         n++;
     }
     json_add(j, "]");
     return n;
 }
 
-/* Caixas (todas, em ordem de chegada) e os contadores delas. */
-static void json_caixas(Json *j, int *pendentes, int *andamento, int *entregues)
+/* Copia a fila de caixas com o mutex; o resto usa só a cópia. */
+static int copiar_caixas(Caixa caixas[])
 {
-    Caixa caixas[MAX_CAIXAS];
-    int i, n;
+    int n;
 
     pthread_mutex_lock(&mem->mutex_caixas);
     n = mem->n_caixas;
     memcpy(caixas, mem->caixas, n * sizeof(Caixa));
     pthread_mutex_unlock(&mem->mutex_caixas);
+    return n;
+}
+
+/* Caixas (todas, em ordem de chegada), com a equipe, e os contadores. */
+static void json_caixas(Json *j, const Caixa caixas[], int n,
+                        int *pendentes, int *andamento, int *entregues)
+{
+    int i, k;
 
     *pendentes = *andamento = *entregues = 0;
     json_add(j, ",\"caixas\":[");
     for (i = 0; i < n; i++) {
-        json_add(j, "%s{\"id\":%d,\"tamanho\":%d,\"baia\":%d,\"zona\":\"%c\",\"status\":\"%s\"}",
+        json_add(j, "%s{\"id\":%d,\"tamanho\":%d,\"baia\":%d,\"zona\":\"%c\","
+                 "\"status\":\"%s\",\"robos\":[",
                  i > 0 ? "," : "", caixas[i].id, caixas[i].tamanho, caixas[i].baia,
                  'A' + caixas[i].zona, nome_status_caixa(caixas[i].status));
+        for (k = 0; k < caixas[i].n_robos; k++)
+            json_add(j, "%s%d", k > 0 ? "," : "", caixas[i].robos[k]);
+        json_add(j, "],\"lider\":%d}", caixas[i].lider);
         if (caixas[i].status == CAIXA_ESPERANDO)         (*pendentes)++;
         else if (caixas[i].status == CAIXA_EM_ANDAMENTO) (*andamento)++;
         else                                             (*entregues)++;
@@ -205,17 +253,19 @@ static void json_passagens(Json *j, sem_t *semaforos[])
 static void publicar_status(struct mosquitto *mosq, sem_t *semaforos[])
 {
     Json j;
+    Caixa caixas[MAX_CAIXAS];
     struct timespec agora;
     char data_hora[48];
-    int ativos, pendentes, andamento, entregues;
+    int n_caixas, ativos, pendentes, andamento, entregues;
 
     clock_gettime(CLOCK_REALTIME, &agora);
     formatar_data_hora(agora, data_hora, sizeof(data_hora));
 
     j.usado = 0;
     json_add(&j, "{\"t\":\"%s\",", data_hora);
-    ativos = json_robos(&j);
-    json_caixas(&j, &pendentes, &andamento, &entregues);
+    n_caixas = copiar_caixas(caixas);
+    ativos = json_robos(&j, caixas, n_caixas);
+    json_caixas(&j, caixas, n_caixas, &pendentes, &andamento, &entregues);
     json_passagens(&j, semaforos);
     json_add(&j, ",\"contadores\":{\"robos_ativos\":%d,\"entregues\":%d,"
              "\"pendentes\":%d,\"em_andamento\":%d}}",
@@ -235,7 +285,40 @@ static void ao_conectar(struct mosquitto *mosq, void *dados, int codigo)
         return;
     }
     printf("Ponte MQTT: conectada ao broker %s:%d\n", BROKER_ENDERECO, BROKER_PORTA);
-    publicar_mapa(mosq); /* a cada (re)conexão */
+    /* A cada (re)conexão: assina de novo (o broker esquece as assinaturas
+     * de um cliente "clean session") e republica o mapa. */
+    mosquitto_subscribe(mosq, NULL, "atr/comando", 0);
+    publicar_mapa(mosq);
+}
+
+/* Callback (thread de rede da biblioteca): chegou uma mensagem. A única
+ * assinatura é atr/comando: executa a linha como se fosse o Console e
+ * publica a resposta. */
+static void ao_receber(struct mosquitto *mosq, void *dados,
+                       const struct mosquitto_message *msg)
+{
+    char linha[128];
+    char resp[TAMANHO_RESPOSTA];
+    char texto[TAMANHO_RESPOSTA + 8];
+    int n;
+    bool ok;
+
+    (void)dados;
+    if (strcmp(msg->topic, "atr/comando") != 0)
+        return;
+    /* O payload não termina em '\0': copia com limite e termina. */
+    n = msg->payloadlen < (int)sizeof(linha) - 1 ? msg->payloadlen : (int)sizeof(linha) - 1;
+    memcpy(linha, msg->payload, n);
+    linha[n] = '\0';
+
+    if (atomic_load(&mem->encerrar)) {
+        snprintf(texto, sizeof(texto), "erro: sistema encerrando");
+    } else {
+        ok = executar_comando(linha, resp, sizeof(resp));
+        snprintf(texto, sizeof(texto), "%s%s", ok ? "" : "erro: ", resp);
+        printf("Ponte MQTT: comando \"%s\" -> %s\n", linha, ok ? "ok" : resp);
+    }
+    mosquitto_publish(mosq, NULL, "atr/comando/resposta", strlen(texto), texto, 0, false);
 }
 
 /* Callback (thread de rede da biblioteca): conexão perdida. */
@@ -247,18 +330,37 @@ static void ao_desconectar(struct mosquitto *mosq, void *dados, int codigo)
         printf("Ponte MQTT: conexao perdida; tentando reconectar\n");
 }
 
-/* Cria o cliente e liga os callbacks (ainda sem conectar). */
-static struct mosquitto *criar_cliente(void)
+/* main, ANTES de criar as threads: cria o cliente e liga os callbacks
+ * (ainda sem conectar; quem conecta é a thread da ponte). */
+void ponte_criar(void)
 {
-    struct mosquitto *mosq;
-
     mosquitto_lib_init();
-    mosq = mosquitto_new("atr_logistica", true, NULL);
-    if (mosq == NULL) { perror("mosquitto_new"); exit(1); }
-    mosquitto_connect_callback_set(mosq, ao_conectar);
-    mosquitto_disconnect_callback_set(mosq, ao_desconectar);
-    mosquitto_reconnect_delay_set(mosq, 1, 10, true); /* 1 s, 2 s, 4 s... até 10 s */
-    return mosq;
+    cliente = mosquitto_new("atr_logistica", true, NULL);
+    if (cliente == NULL) { perror("mosquitto_new"); exit(1); }
+    mosquitto_connect_callback_set(cliente, ao_conectar);
+    mosquitto_disconnect_callback_set(cliente, ao_desconectar);
+    mosquitto_message_callback_set(cliente, ao_receber);
+    mosquitto_reconnect_delay_set(cliente, 1, 10, true); /* 1 s, 2 s, 4 s... até 10 s */
+}
+
+/* Publica um texto num tópico. Pode ser chamada de qualquer thread do
+ * processo central (o Coletor usa para atr/eventos). Sem conexão, a
+ * mensagem é descartada. */
+void ponte_publicar(const char *topico, const char *texto)
+{
+    mosquitto_publish(cliente, NULL, topico, strlen(texto), texto, 0, false);
+}
+
+/* main, DEPOIS de todas as threads terminarem: desconecta, para a thread
+ * de rede e libera o cliente. */
+void ponte_destruir(void)
+{
+    if (rede_iniciada) {
+        mosquitto_disconnect(cliente);
+        mosquitto_loop_stop(cliente, false); /* espera a thread de rede terminar */
+    }
+    mosquitto_destroy(cliente);
+    mosquitto_lib_cleanup();
 }
 
 /* Tenta a primeira conexão. Se der certo, inicia a thread de rede da
@@ -294,33 +396,27 @@ static void abrir_semaforos(sem_t *semaforos[])
 
 void *tarefa_ponte_mqtt(void *arg)
 {
-    struct mosquitto *mosq;
     sem_t *semaforos[N_PASSAGENS];
     struct timespec proximo;
-    bool rede_iniciada = false, avisou = false;
+    bool avisou = false;
     int i, ciclo = 0;
 
     (void)arg;
     abrir_semaforos(semaforos);
-    mosq = criar_cliente();
 
     clock_gettime(CLOCK_MONOTONIC, &proximo);
     while (!atomic_load(&mem->encerrar)) {
         if (!rede_iniciada && ciclo % CICLOS_ENTRE_TENTATIVAS == 0)
-            rede_iniciada = tentar_conectar(mosq, &avisou);
+            rede_iniciada = tentar_conectar(cliente, &avisou);
         if (rede_iniciada)
-            publicar_status(mosq, semaforos);
+            publicar_status(cliente, semaforos);
         ciclo++;
         somar_ms(&proximo, PERIODO_PONTE_MS);
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &proximo, NULL);
     }
 
-    if (rede_iniciada) {
-        mosquitto_disconnect(mosq);
-        mosquitto_loop_stop(mosq, false); /* espera a thread de rede terminar */
-    }
-    mosquitto_destroy(mosq);
-    mosquitto_lib_cleanup();
+    /* A conexão continua aberta: o Coletor ainda publica os últimos
+     * eventos. Quem desconecta é ponte_destruir(), no fim do main. */
     for (i = 0; i < N_PASSAGENS; i++)
         sem_close(semaforos[i]);
     return NULL;
