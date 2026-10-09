@@ -26,8 +26,10 @@
 MemoriaCompartilhada *mem;
 mqd_t fila_coletor;
 int id_robo;
+/* mutex, estado, estado_antes, parar, ir_recarregar, recarga_x/y,
+ * destino_x/y (sem rota), n_rota e os vetores da rota (vazios). */
 EstadoLocal estado_local = { PTHREAD_MUTEX_INITIALIZER, DISPONIVEL, DISPONIVEL,
-                              false, false, 0, 0, -1, -1 };
+                              false, false, 0, 0, -1, -1, 0, {0}, {0} };
 
 int main(int argc, char *argv[])
 {

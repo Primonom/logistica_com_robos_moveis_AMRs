@@ -2,7 +2,9 @@
 estado.py — "Loja" de estado da Tela de Operação.
 
 Guarda o que chega pelo MQTT: o último status, o mapa, os últimos eventos,
-a última resposta de comando e se o broker está conectado.
+a última resposta de comando e se o broker está conectado. Guarda também a
+DIREÇÃO de cada robô (só para o desenho): andando, é a direção do ponto
+atual para o setpoint; parado, continua a última conhecida.
 
 Concorrência (é ATR também):
   - Quem ESCREVE aqui é a thread de rede do paho-mqtt (callbacks em
@@ -21,6 +23,7 @@ Este arquivo não importa nada da interface: dá para testar só com
 dicionários (ver testes/test_estado.py).
 """
 import copy
+import math
 import threading
 import time
 from collections import deque
@@ -40,6 +43,7 @@ class Estado:
         self._eventos = deque(maxlen=MAX_EVENTOS)
         self._ultima_resposta = None     # texto de atr/comando/resposta
         self._amostras_entregas = deque()  # (instante, entregues) da última janela
+        self._direcoes = {}              # id do robô -> ângulo em graus (0 = direita)
 
     # ---------- Escrita (chamadas pela thread do MQTT) ----------
 
@@ -48,10 +52,18 @@ class Estado:
         with self._trava:
             self._status = status
             self._status_em = agora
-            self._amostras_entregas.append((agora, status["contadores"]["entregues"]))
+            entregues = status["contadores"]["entregues"]
+            # contador voltou (o sistema central foi reiniciado): começa a janela de novo
+            if self._amostras_entregas and entregues < self._amostras_entregas[-1][1]:
+                self._amostras_entregas.clear()
+            self._amostras_entregas.append((agora, entregues))
             # descarta amostras mais velhas que a janela
             while self._amostras_entregas[0][0] < agora - JANELA_ENTREGAS_S:
                 self._amostras_entregas.popleft()
+            for r in status["robos"]:
+                dx, dy = r["sp_x"] - r["x"], r["sp_y"] - r["y"]
+                if dx != 0 or dy != 0:        # parado: mantém o ângulo anterior
+                    self._direcoes[r["id"]] = math.degrees(math.atan2(dy, dx))
 
     def guardar_mapa(self, mapa):
         with self._trava:
@@ -84,6 +96,7 @@ class Estado:
                 "sistema_online": (self._status_em is not None
                                    and agora - self._status_em <= SISTEMA_OFFLINE_S),
                 "entregas_por_minuto": self._entregas_por_minuto(),
+                "direcoes": dict(self._direcoes),
             }
         return dados
 

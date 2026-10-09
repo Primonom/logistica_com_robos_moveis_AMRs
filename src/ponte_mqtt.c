@@ -170,6 +170,17 @@ static int lider_da_carga(int carga_id, const Caixa caixas[], int n_caixas)
     return -1;
 }
 
+/* Termina o robô com ,"rota":[[x,y],...]} (próximos waypoints). */
+static void json_rota(Json *j, const Robo *r)
+{
+    int k;
+
+    json_add(j, ",\"rota\":[");
+    for (k = 0; k < r->n_rota; k++)
+        json_add(j, "%s[%d,%d]", k > 0 ? "," : "", r->rota_x[k], r->rota_y[k]);
+    json_add(j, "]}");
+}
+
 /* Robôs ativos, lidos SÓ do buffer de status. Retorna quantos são.
  * "caixas" é a cópia feita antes, usada só para achar o líder. */
 static int json_robos(Json *j, const Caixa caixas[], int n_caixas)
@@ -187,12 +198,13 @@ static int json_robos(Json *j, const Caixa caixas[], int n_caixas)
         /* Daqui para baixo só a cópia (r) é usada, já fora do mutex. */
         json_add(j, "%s{\"id\":%d,\"estado\":\"%s\",\"modo\":\"%s\",\"x\":%d,\"y\":%d,"
                  "\"sp_x\":%d,\"sp_y\":%d,\"destino_x\":%d,\"destino_y\":%d,"
-                 "\"bateria\":%d,\"distancia\":%.0f,\"carga\":%d,\"lider\":%d}",
+                 "\"bateria\":%d,\"distancia\":%.0f,\"carga\":%d,\"lider\":%d",
                  n > 0 ? "," : "", i, nome_estado(r.e_estado),
                  r.modo_automatico ? "auto" : "manual", r.e_posicao_x, r.e_posicao_y,
                  r.j_sp_posicao_x, r.j_sp_posicao_y, r.destino_x, r.destino_y,
                  r.bateria, r.distancia_total, r.carga_id,
                  r.carga_id == -1 ? -1 : lider_da_carga(r.carga_id, caixas, n_caixas));
+        json_rota(j, &r);
         n++;
     }
     json_add(j, "]");

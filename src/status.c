@@ -11,8 +11,9 @@
  *      "ir_recarregar" (com a estação mais próxima) e muda para
  *      RECARREGANDO. Na estação, com 100%, volta para DISPONIVEL;
  *   4) copia o hw para o BUFFER DE STATUS (e_posicao_x/y, j_sp_posicao_x/y,
- *      bateria, e_estado, distancia_total, destino_x/y) e soma a distância
- *      percorrida. O estado e o destino vêm do estado_local (Navegação).
+ *      bateria, e_estado, distancia_total, destino_x/y, rota) e soma a
+ *      distância percorrida. Estado, destino e rota vêm do estado_local
+ *      (Navegação).
  *      É a ÚNICA tarefa que escreve nesses campos; o Organizador e o
  *      Console só leem o buffer, nunca o hw.
  *
@@ -80,10 +81,19 @@ static void verificar_bateria(int bateria, int carga_id, int x, int y)
     if (terminou)  registrar_evento(fila_coletor, id_robo, "recarga completa: disponivel");
 }
 
+/* Rota copiada do estado_local (para levar ao buffer sem segurar os dois
+ * mutexes ao mesmo tempo). */
+typedef struct {
+    int n, x[MAX_ROTA_STATUS], y[MAX_ROTA_STATUS];
+} CopiaRota;
+
 /* 4) Copia hw -> buffer de status. Chamada com o mutex do robô travado.
- * estado e destino vêm do estado_local (lidos antes, fora deste mutex). */
-static void atualizar_buffer(Robo *r, Estado estado, int destino_x, int destino_y)
+ * estado, destino e rota vêm do estado_local (lidos antes, fora deste mutex). */
+static void atualizar_buffer(Robo *r, Estado estado, int destino_x, int destino_y,
+                             const CopiaRota *rota)
 {
+    int k;
+
     /* O robô anda só na horizontal ou na vertical, então a distância desde
      * o último ciclo é |dx| + |dy| (a posição anterior é a do buffer). */
     r->distancia_total += abs(r->hw.i_posicao_x - r->e_posicao_x)
@@ -97,6 +107,11 @@ static void atualizar_buffer(Robo *r, Estado estado, int destino_x, int destino_
     r->e_estado       = estado;
     r->destino_x      = destino_x;
     r->destino_y      = destino_y;
+    r->n_rota         = rota->n;
+    for (k = 0; k < rota->n; k++) {
+        r->rota_x[k] = rota->x[k];
+        r->rota_y[k] = rota->y[k];
+    }
 }
 
 void *tarefa_status(void *arg)
@@ -104,8 +119,9 @@ void *tarefa_status(void *arg)
     Robo *r = &mem->robos[id_robo];
     struct timespec proximo;
     bool falha;
-    int bateria, carga_id, x, y, destino_x, destino_y;
+    int bateria, carga_id, x, y, destino_x, destino_y, k;
     Estado estado;
+    CopiaRota rota;
 
     (void)arg;
     clock_gettime(CLOCK_MONOTONIC, &proximo);
@@ -126,10 +142,15 @@ void *tarefa_status(void *arg)
         estado = estado_local.estado;
         destino_x = estado_local.destino_x;
         destino_y = estado_local.destino_y;
+        rota.n = estado_local.n_rota;
+        for (k = 0; k < rota.n; k++) {
+            rota.x[k] = estado_local.rota_x[k];
+            rota.y[k] = estado_local.rota_y[k];
+        }
         pthread_mutex_unlock(&estado_local.mutex);
 
         pthread_mutex_lock(&r->mutex);
-        atualizar_buffer(r, estado, destino_x, destino_y);
+        atualizar_buffer(r, estado, destino_x, destino_y, &rota);
         pthread_mutex_unlock(&r->mutex);
 
         somar_ms(&proximo, PERIODO_STATUS_MS);

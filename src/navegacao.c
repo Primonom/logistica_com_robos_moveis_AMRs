@@ -127,6 +127,22 @@ static void publicar_destino(int x, int y)
     pthread_mutex_unlock(&estado_local.mutex);
 }
 
+/* Informa à Status os PRÓXIMOS waypoints da rota (a partir do atual, no
+ * máximo MAX_ROTA_STATUS), para ela publicar no buffer (a tela desenha o
+ * caminho). Sem rota: n_rota = 0. */
+static void publicar_rota(void)
+{
+    int k, n = 0;
+
+    pthread_mutex_lock(&estado_local.mutex);
+    for (k = indice; k < rota.n && n < MAX_ROTA_STATUS; k++, n++) {
+        estado_local.rota_x[n] = rota.pontos[k].x;
+        estado_local.rota_y[n] = rota.pontos[k].y;
+    }
+    estado_local.n_rota = n;
+    pthread_mutex_unlock(&estado_local.mutex);
+}
+
 /* Escreve o comando da garra no hw (o simulador lê). */
 static void comandar_garra(bool erguer)
 {
@@ -225,6 +241,7 @@ static void tratar_mensagem(const MensagemRobo *m)
         indice = 0;
         tem_destino = false;
         publicar_destino(-1, -1);
+        publicar_rota();          /* rota.n = 0: rota vazia */
         definir_estado(DISPONIVEL);
         registrar_evento(fila_coletor, id_robo, "carga solta");
         break;
@@ -307,6 +324,7 @@ static void iniciar_rota_pendente(void)
     indice = 0;
     tem_destino = false;
     publicar_destino(destino_x, destino_y);
+    publicar_rota();
 }
 
 /* Tenta pegar o semáforo da passagem p, esperando no máximo
@@ -363,6 +381,7 @@ static void seguir_rota(void)
         evento("saiu da passagem P%d", w.passagem + 1);
     }
     indice++;
+    publicar_rota();              /* um waypoint a menos */
     if (indice == rota.n) {
         publicar_destino(-1, -1);
         definir_estado(estado_ao_chegar);

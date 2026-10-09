@@ -24,6 +24,7 @@
 /* ---------- Limites ---------- */
 #define MAX_ROBOS  16
 #define MAX_CAIXAS 64
+#define MAX_ROTA_STATUS 8     /* waypoints da rota publicados no buffer de status */
 
 /* ---------- Períodos das tarefas periódicas (em milissegundos) ---------- */
 #define PERIODO_NAVEGACAO_MS    100   /* T1 */
@@ -104,8 +105,9 @@ typedef struct {
     int      bateria;                         /* em % */
     Estado   e_estado;
     double   distancia_total;
-    int      destino_x, destino_y;  /* fim da rota atual (-1 = sem rota);
-                                     * a tela desenha a linha até ele */
+    int      destino_x, destino_y;  /* fim da rota atual (-1 = sem rota) */
+    int      n_rota;                /* próximos waypoints da rota (até 8): */
+    int      rota_x[MAX_ROTA_STATUS], rota_y[MAX_ROTA_STATUS]; /* a tela desenha o caminho */
 
     bool     modo_automatico;
     int      carga_id;         /* -1 se nenhuma */
@@ -266,6 +268,8 @@ typedef struct {
     int    recarga_x, recarga_y;  /* estação escolhida pela Status */
     int    destino_x, destino_y;  /* Navegação -> Status: fim da rota atual
                                    * (-1 = sem rota), publicado no buffer */
+    int    n_rota;                /* Navegação -> Status: próximos waypoints */
+    int    rota_x[MAX_ROTA_STATUS], rota_y[MAX_ROTA_STATUS];
 } EstadoLocal;
 
 extern EstadoLocal estado_local;
