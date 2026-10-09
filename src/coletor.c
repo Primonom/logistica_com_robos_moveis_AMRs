@@ -24,8 +24,9 @@
 #include <sys/stat.h>
 #include "comum.h"
 
-/* Converte o timestamp em texto "AAAA-MM-DD HH:MM:SS.mmm". */
-static void formatar_data_hora(struct timespec quando, char *saida, int tamanho)
+/* Converte o timestamp em texto "AAAA-MM-DD HH:MM:SS.mmm".
+ * Também usada pela ponte MQTT (campo "t" do atr/status). */
+void formatar_data_hora(struct timespec quando, char *saida, int tamanho)
 {
     struct tm data;
     char sem_ms[32];

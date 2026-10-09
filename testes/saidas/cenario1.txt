@@ -1,24 +1,25 @@
-Gestor: robo 0 criado (pid 1537) em (25,15)
+Ponte MQTT: conectada ao broker localhost:1883
+Gestor: robo 0 criado (pid 3770) em (25,15)
 Organizador: 1 robo(s) novo(s) na frota
-Robo 0 vivo (pid 1537)
+Robo 0 vivo (pid 3770)
 Console: robo 0 em DISPONIVEL
 Organizador: caixa 1 (tam 1, baia 1 -> zona A): robos 0 indo para a baia
 Console: robo 0 em DESLOCANDO
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   1537    DESLOCANDO         (25,15)  (25,15)  100%     0  auto  1
+0   3770    DESLOCANDO         (25,15)  (25,15)  100%     0  auto  1
 caixa 1   tam 1  baia 1 -> zona A  em andamento
 caixas entregues: 0
 Organizador: caixa 1: equipe completa na baia, ACOPLAR
 Console: robo 0 em OPERANDO_CARGA
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   1537    OPERANDO_CARGA     ( 3, 4)  ( 3, 4)   94%    33  auto  1
+0   3770    OPERANDO_CARGA     ( 3, 4)  ( 3, 4)   94%    33  auto  1
 caixa 1   tam 1  baia 1 -> zona A  em andamento
 caixas entregues: 0
 Organizador: caixa 1: erguida por todos, IR_ZONA A (lider 0)
 Organizador: caixa 1 entregue na zona A (robos 0)
 Console: robo 0 em DISPONIVEL
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   1537    DISPONIVEL         (56, 4)  (56, 4)   79%   108  auto  -1
+0   3770    DISPONIVEL         (56, 4)  (56, 4)   79%   108  auto  -1
 caixas entregues: 1
 Encerrando...
 Fim.

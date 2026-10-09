@@ -2,3 +2,5 @@ logistica
 robo
 *.o
 logs/
+interface/.venv/
+__pycache__/

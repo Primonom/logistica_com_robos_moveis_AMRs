@@ -7,7 +7,8 @@
  *
  * Uso: ./logistica [arquivo_de_caixas]   (padrão: config/caixas.txt)
  *
- * Threads: principal, Coletor, Gestor, Organizador e Simulador-stub.
+ * Threads: principal, Coletor, Gestor, Organizador, Simulador-stub e
+ * Ponte MQTT (que por sua vez inicia a thread de rede da libmosquitto).
  *   A thread principal roda o Console (laço de comandos do stdin). Quando
  *   chega "sair" ou o fim da entrada, ela faz o encerramento limpo.
  *   Ctrl+C usa o comportamento padrão do SIGINT: mata o processo central e
@@ -113,7 +114,7 @@ static void encerrar_robos(void)
 
 int main(int argc, char *argv[])
 {
-    pthread_t th_coletor, th_gestor, th_simulador, th_organizador;
+    pthread_t th_coletor, th_gestor, th_simulador, th_organizador, th_ponte;
     char *arquivo_caixas = (argc > 1) ? argv[1] : "config/caixas.txt";
 
     setvbuf(stdout, NULL, _IOLBF, 0); /* imprime linha a linha, mesmo em pipe */
@@ -127,18 +128,22 @@ int main(int argc, char *argv[])
     criar_thread(&th_gestor, tarefa_gestor, NULL, "gestor");
     criar_thread(&th_simulador, tarefa_simulador, NULL, "simulador");
     criar_thread(&th_organizador, tarefa_organizador, arquivo_caixas, "organizador");
+    criar_thread(&th_ponte, tarefa_ponte_mqtt, NULL, "ponte_mqtt");
 
     /* Console na thread principal: só retorna em "sair" ou fim da entrada. */
     executar_console();
     printf("Encerrando...\n");
 
     /* 1. Avisa todos e espera o Gestor (para não criar robô durante o fim),
-     *    o Organizador e o Simulador (percebem encerrar no próximo ciclo). */
+     *    o Organizador, o Simulador e a Ponte MQTT (percebem encerrar no
+     *    próximo ciclo; a Ponte usa a memória e os semáforos, então tem de
+     *    terminar antes de eles serem removidos). */
     atomic_store(&mem->encerrar, true);
     acordar_gestor();
     pthread_join(th_gestor, NULL);
     pthread_join(th_organizador, NULL);
     pthread_join(th_simulador, NULL);
+    pthread_join(th_ponte, NULL);
 
     /* 2. Encerra os processos robo. */
     encerrar_robos();
