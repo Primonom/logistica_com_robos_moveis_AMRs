@@ -153,6 +153,12 @@ typedef struct {
     pthread_mutex_t mutex_caixas;
     Caixa caixas[MAX_CAIXAS];  /* em ORDEM DE CHEGADA (a fila do Organizador) */
     int   n_caixas;
+    /* Caixa que o Organizador está tentando atender e não conseguiu (falta
+     * equipe), e quantos robôs livres havia — só para a tela mostrar o
+     * motivo da espera. -1 = nenhuma esperando. Também protegidos por
+     * mutex_caixas (são escritos junto com a fila). */
+    int   caixa_em_espera;
+    int   robos_livres_espera;
 
     /* Pedido de encerramento: escrito pelo processo central e lido por
      * várias threads (de vários processos) em seus laços.

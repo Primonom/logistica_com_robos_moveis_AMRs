@@ -92,6 +92,15 @@ class TestEstado(unittest.TestCase):
         self.assertEqual(d["historico"], {})
         self.assertEqual(d["direcoes"], {})
 
+    def test_eventos_e_respostas_numerados(self):
+        e = Estado()
+        e.guardar_evento({"robo": 1, "texto": "a"})
+        e.guardar_evento({"robo": 1, "texto": "b"})
+        e.guardar_resposta("erro: robo 9 nao existe")
+        d = e.copia()
+        self.assertEqual([ev["seq"] for ev in d["eventos"]], [1, 2])
+        self.assertEqual((d["seq_resposta"], d["ultima_resposta"]), (1, "erro: robo 9 nao existe"))
+
     def test_duas_threads_ao_mesmo_tempo(self):
         """Uma thread escreve (como o MQTT) enquanto outra copia (como a tela)."""
         e = Estado()

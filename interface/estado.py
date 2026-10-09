@@ -44,6 +44,8 @@ class Estado:
         self._broker_conectado = False
         self._eventos = deque(maxlen=MAX_EVENTOS)
         self._ultima_resposta = None     # texto de atr/comando/resposta
+        self._seq_evento = 0             # números de sequência: cada aba sabe o que
+        self._seq_resposta = 0           # já mostrou (notificações só do que é novo)
         self._amostras_entregas = deque()  # (instante, entregues) da última janela
         self._direcoes = {}              # id do robô -> ângulo em graus (0 = direita)
         self._historico = {}             # id -> deque de (instante, bateria, distância)
@@ -83,10 +85,13 @@ class Estado:
                 self._historico.clear()
                 self._direcoes.clear()
                 self._ultima_amostra = None
+            self._seq_evento += 1
+            evento["seq"] = self._seq_evento
             self._eventos.append(evento)
 
     def guardar_resposta(self, texto):
         with self._trava:
+            self._seq_resposta += 1
             self._ultima_resposta = texto
 
     def definir_conexao(self, conectado):
@@ -104,6 +109,7 @@ class Estado:
                 "mapa": copy.deepcopy(self._mapa),
                 "eventos": list(self._eventos),     # os eventos não são alterados depois
                 "ultima_resposta": self._ultima_resposta,
+                "seq_resposta": self._seq_resposta,
                 "broker_conectado": self._broker_conectado,
                 "sistema_online": (self._status_em is not None
                                    and agora - self._status_em <= SISTEMA_OFFLINE_S),

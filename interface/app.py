@@ -21,7 +21,10 @@ import cores
 from estado import Estado
 from mqtt_cliente import ClienteMqtt
 from paineis.cabecalho import Cabecalho
+from paineis.caixas import PainelCaixas
+from paineis.eventos import Notificador, PainelEventos
 from paineis.mapa import PainelMapa
+from paineis.simulacao import PainelSimulacao
 from paineis.robos import PainelDetalhe, PainelRobos
 
 PERIODO_TELA_S = 0.2   # mesmo período do atr/status
@@ -79,6 +82,18 @@ body {{ background: {cores.FUNDO}; color: {cores.TEXTO}; }}
 .grafico {{ height: 190px; }}
 .evento-hora {{ color: {cores.TEXTO_FRACO}; font-variant-numeric: tabular-nums; font-size: .8rem; }}
 .evento-texto {{ font-size: .85rem; }}
+.linha-inferior {{ display: grid; gap: 16px; width: 100%;
+                   grid-template-columns: minmax(380px, 1.3fr) minmax(360px, 1.2fr) minmax(280px, .8fr); }}
+@media (max-width: 1300px) {{ .linha-inferior {{ grid-template-columns: 1fr; }} }}
+.aviso-espera {{ background: #3b2a08; border: 1px solid #b45309; color: #fcd34d; border-radius: 8px;
+                 padding: 6px 10px; font-size: .85rem; }}
+.tabela-caixas {{ background: transparent; max-height: 340px; }}
+.caixa-tamanho {{ display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 4px;
+                  color: #2B2A33; font-weight: 700; border: 1.5px solid #2B2A33; }}
+.campo-caixa {{ width: 104px; }}
+.lista-eventos {{ max-height: 420px; overflow-y: auto; }}
+.linha-evento {{ padding: 2px 0; border-bottom: 1px solid {cores.BORDA}; }}
+.evento-quem {{ font-size: .8rem; font-weight: 600; min-width: 62px; }}
 .q-drawer {{ background: {cores.PAINEL} !important; border-left: 1px solid {cores.BORDA}; }}
 .mapa {{ border-radius: 18px; overflow: hidden; }}
 .legenda-mapa {{ background: #f4f0e8; border-radius: 14px; padding: 4px 8px; overflow-x: auto; }}
@@ -91,6 +106,7 @@ def pagina():
     ui.add_css(CSS)
     enviar = cliente_mqtt.enviar_comando
     selecao = {"id": None}    # robô selecionado NESTA aba do navegador
+    modo_clique = {"novo_robo": False}   # clique no mapa posiciona um novo robô?
 
     def selecionar(rid):
         selecao["id"] = rid
@@ -109,14 +125,23 @@ def pagina():
         detalhe = PainelDetalhe(fechar_detalhe, enviar)
     with ui.column().classes("w-full p-4 gap-4"):
         cabecalho = Cabecalho()
-        mapa = PainelMapa(selecionar, enviar)
+        mapa = PainelMapa(selecionar, enviar, modo_clique)
         robos = PainelRobos(selecionar, enviar)
+        with ui.element("div").classes("linha-inferior"):
+            caixas = PainelCaixas(enviar)
+            eventos = PainelEventos()
+            simulacao = PainelSimulacao(enviar, modo_clique)
+    notificador = Notificador()
 
     def atualizar():
         dados = estado.copia()   # cópia feita com a trava; o resto é fora dela
         cabecalho.atualizar(dados)
         mapa.atualizar(dados)
         robos.atualizar(dados, selecao["id"])
+        caixas.atualizar(dados)
+        eventos.atualizar(dados)
+        simulacao.atualizar(dados)
+        notificador.atualizar(dados)
         if selecao["id"] is not None:
             detalhe.atualizar(dados)
 

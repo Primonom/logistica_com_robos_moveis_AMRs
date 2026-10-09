@@ -1,11 +1,11 @@
 Ponte MQTT: conectada ao broker localhost:1883
-Gestor: robo 0 criado (pid 16385) em (5,15)
-Gestor: robo 1 criado (pid 16386) em (6,15)
-Gestor: robo 2 criado (pid 16387) em (30,20)
+Gestor: robo 0 criado (pid 18462) em (5,15)
+Gestor: robo 1 criado (pid 18463) em (6,15)
+Gestor: robo 2 criado (pid 18464) em (30,20)
 Organizador: 3 robo(s) novo(s) na frota
-Robo 0 vivo (pid 16385)
-Robo 1 vivo (pid 16386)
-Robo 2 vivo (pid 16387)
+Robo 0 vivo (pid 18462)
+Robo 1 vivo (pid 18463)
+Robo 2 vivo (pid 18464)
 Console: robo 2 em DISPONIVEL
 Organizador: caixa 1 (tam 2, baia 2 -> zona C): robos 0 1 indo para a baia
 Organizador: caixa 1: equipe completa na baia, ACOPLAR
@@ -14,9 +14,9 @@ Organizador: caixa 1: erguida por todos, IR_ZONA C (lider 0)
 Organizador: caixa 1: robo da equipe em DEFEITO, PAUSAR
 Console: robo 1 em DEFEITO
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   16385   OPERANDO_CARGA     (17,15)  (17,15)   25%    24  auto  1
-1   16386   DEFEITO            (14,15)  (14,15)   96%    22  auto  1
-2   16387   DISPONIVEL         (30,20)  (30,20)  100%     0  auto  -1
+0   18462   OPERANDO_CARGA     (17,15)  (17,15)   25%    24  auto  1
+1   18463   DEFEITO            (14,15)  (14,15)   96%    22  auto  1
+2   18464   DISPONIVEL         (30,20)  (30,20)  100%     0  auto  -1
 caixa 1   tam 2  baia 2 -> zona C  em andamento
 caixas entregues: 0
 Console: robo 1 em OPERANDO_CARGA
@@ -24,21 +24,21 @@ Organizador: caixa 1: defeito resolvido, CONTINUAR
 Organizador: caixa 1 entregue na zona C (robos 0 1)
 Console: robo 1 em DISPONIVEL
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   16385   RECARREGANDO       (56,17)  (56,15)   16%    67  auto  -1
-1   16386   DISPONIVEL         (56,18)  (56,18)   87%    67  auto  -1
-2   16387   DISPONIVEL         (30,20)  (30,20)  100%     0  auto  -1
+0   18462   RECARREGANDO       (56,18)  (56,18)   16%    66  auto  -1
+1   18463   DISPONIVEL         (56,18)  (56,18)   87%    67  auto  -1
+2   18464   DISPONIVEL         (30,20)  (30,20)  100%     0  auto  -1
 caixas entregues: 1
 Console: robo 0 em RECARREGANDO
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   16385   RECARREGANDO       (56,17)  (56,15)   16%    67  auto  -1
-1   16386   DISPONIVEL         (56,18)  (56,18)   87%    67  auto  -1
-2   16387   DISPONIVEL         (30,20)  (30,20)  100%     0  auto  -1
+0   18462   RECARREGANDO       (56,18)  (56,18)   16%    66  auto  -1
+1   18463   DISPONIVEL         (56,18)  (56,18)   87%    67  auto  -1
+2   18464   DISPONIVEL         (30,20)  (30,20)  100%     0  auto  -1
 caixas entregues: 1
 Console: robo 0 em DISPONIVEL
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   16385   DISPONIVEL         (45,28)  (45,28)  100%    93  auto  -1
-1   16386   DISPONIVEL         (56,18)  (56,18)   87%    67  auto  -1
-2   16387   DISPONIVEL         (30,20)  (30,20)  100%     0  auto  -1
+0   18462   DISPONIVEL         (45,28)  (45,28)  100%    93  auto  -1
+1   18463   DISPONIVEL         (56,18)  (56,18)   87%    67  auto  -1
+2   18464   DISPONIVEL         (30,20)  (30,20)  100%     0  auto  -1
 caixas entregues: 1
 Encerrando...
 Fim.

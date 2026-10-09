@@ -39,6 +39,34 @@ def do_estado(estado):
     return ESTADOS.get(estado, DESCONHECIDO)
 
 
+# Categorias de evento (para filtro, cor e notificação). Só aparência: a
+# categoria é tirada do texto que o C já mandou, não decide nada.
+CATEGORIAS_EVENTO = {
+    "defeito":  {"rotulo": "Defeitos",          "cor": "#ef4444", "icone": "warning"},
+    "bateria":  {"rotulo": "Bateria / recarga", "cor": "#06b6d4", "icone": "battery_alert"},
+    "passagem": {"rotulo": "Passagens",         "cor": "#f59e0b", "icone": "traffic"},
+    "carga":    {"rotulo": "Caixas e equipes",  "cor": "#a855f7", "icone": "inventory_2"},
+    "sistema":  {"rotulo": "Sistema",           "cor": "#60a5fa", "icone": "dns"},
+    "outros":   {"rotulo": "Outros",            "cor": "#64748b", "icone": "circle"},
+}
+
+
+def categoria_evento(evento):
+    """Categoria de um evento do atr/eventos (pelo tipo e pelo texto)."""
+    t = evento["texto"].lower()
+    if "defeito" in t:
+        return "defeito"
+    if "bateria" in t or "recarga" in t:
+        return "bateria"
+    if "passagem" in t:
+        return "passagem"
+    if evento["tipo"] == "carga" or "caixa" in t or "carga" in t or "lider" in t:
+        return "carga"
+    if evento["robo"] == -1:
+        return "sistema"
+    return "outros"
+
+
 def da_bateria(pct):
     """Cor da bateria: vermelho < 20% (recarga), âmbar < 30% (não pega tarefa)."""
     if pct < 20:

@@ -11,6 +11,8 @@ imagem ocupa toda a largura do painel (o navegador escala as duas juntas).
 
 Clique no mapa (o interactive_image devolve o ponto em pixels da imagem,
 já desfazendo a escala):
+  - com o modo "posicionar novo robô" ligado (painel Simulação): envia
+    "novo <x> <y>" para a célula clicada e desliga o modo;
   - em cima de um robô (mapa_svg.robo_no_ponto): seleciona o robô;
   - no chão, com um robô em MANUAL selecionado: envia "goto <id> <x> <y>"
     para a célula clicada (mapa_svg.celula_do_ponto); o C valida e responde.
@@ -35,9 +37,10 @@ def _data_uri(svg):
 
 
 class PainelMapa:
-    def __init__(self, ao_selecionar, enviar):
+    def __init__(self, ao_selecionar, enviar, modo_clique):
         self.ao_selecionar = ao_selecionar
         self.enviar = enviar
+        self.modo_clique = modo_clique    # {"novo_robo": bool}, da página
         self.mapa = None          # último atr/mapa desenhado no fundo
         self.selecionado = None   # id do robô selecionado
         self.status = None        # último status e direções desenhados (para o clique)
@@ -74,7 +77,9 @@ class PainelMapa:
 
     def _atualizar_dica(self):
         r = self._robo_selecionado()
-        if r is None:
+        if self.modo_clique["novo_robo"]:
+            texto = "Clique no chão para posicionar o NOVO robô."
+        elif r is None:
             texto = "Clique num robô para selecionar."
         elif r["estado"] == "MANUAL":
             texto = f"Robô {r['id']} em MANUAL: clique no chão para mandá-lo até lá."
@@ -83,7 +88,13 @@ class PainelMapa:
         self.dica.set_text(texto)
 
     def _clique(self, evento):
-        """Robô no ponto -> seleciona; chão + robô MANUAL selecionado -> goto."""
+        """Novo robô (modo ligado) -> novo; robô no ponto -> seleciona;
+        chão + robô MANUAL selecionado -> goto."""
+        if self.modo_clique["novo_robo"]:
+            x, y = mapa_svg.celula_do_ponto(evento.image_x, evento.image_y)
+            self.enviar(f"novo {x} {y}")
+            self.modo_clique["novo_robo"] = False
+            return
         rid = mapa_svg.robo_no_ponto(evento.image_x, evento.image_y, self.status, self.direcoes)
         if rid is not None:
             self.ao_selecionar(rid)
