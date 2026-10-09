@@ -1,0 +1,70 @@
+2026-10-09 10:19:03.126;-1;sistema iniciado
+2026-10-09 10:19:03.131;0;robo criado (pid 1611) em (20,15)
+2026-10-09 10:19:03.133;1;robo criado (pid 1612) em (22,15)
+2026-10-09 10:19:03.133;-1;1 robo(s) novo(s) na frota
+2026-10-09 10:19:03.134;2;robo criado (pid 1613) em (24,15)
+2026-10-09 10:19:03.138;1;robo vivo
+2026-10-09 10:19:03.138;0;robo vivo
+2026-10-09 10:19:03.139;2;robo vivo
+2026-10-09 10:19:03.634;-1;2 robo(s) novo(s) na frota
+2026-10-09 10:19:03.634;-1;caixa 1 (tam 4) aguardando equipe: 3 robo(s) livre(s)
+2026-10-09 10:19:06.000;2;modo manual
+2026-10-09 10:19:06.101;2;modo automatico
+2026-10-09 10:19:06.297;3;robo criado (pid 1620) em (26,15)
+2026-10-09 10:19:06.373;3;robo vivo
+2026-10-09 10:19:06.795;-1;1 robo(s) novo(s) na frota
+2026-10-09 10:19:06.796;-1;caixa 1 (tam 4, baia 1 -> zona B): robos 0 1 2 3 indo para a baia
+2026-10-09 10:19:06.798;-1;caixa 2 (tam 1) aguardando equipe: 0 robo(s) livre(s)
+2026-10-09 10:19:06.800;1;tarefa: ir para a baia (caixa 1)
+2026-10-09 10:19:06.800;0;tarefa: ir para a baia (caixa 1)
+2026-10-09 10:19:06.801;2;tarefa: ir para a baia (caixa 1)
+2026-10-09 10:19:06.874;3;tarefa: ir para a baia (caixa 1)
+2026-10-09 10:19:07.300;0;entrou na passagem P1
+2026-10-09 10:19:07.500;1;entrou na passagem P1
+2026-10-09 10:19:07.700;0;saiu da passagem P1
+2026-10-09 10:19:07.701;2;entrou na passagem P1
+2026-10-09 10:19:07.900;1;saiu da passagem P1
+2026-10-09 10:19:07.974;3;entrou na passagem P1
+2026-10-09 10:19:08.100;2;saiu da passagem P1
+2026-10-09 10:19:08.374;3;saiu da passagem P1
+2026-10-09 10:19:10.000;0;chegou ao destino
+2026-10-09 10:19:10.200;1;chegou ao destino
+2026-10-09 10:19:10.401;2;chegou ao destino
+2026-10-09 10:19:10.674;3;chegou ao destino
+2026-10-09 10:19:10.797;-1;caixa 1: equipe completa na baia, ACOPLAR
+2026-10-09 10:19:10.900;1;carga erguida
+2026-10-09 10:19:10.900;0;carga erguida
+2026-10-09 10:19:10.901;2;carga erguida
+2026-10-09 10:19:10.974;3;carga erguida
+2026-10-09 10:19:11.295;-1;caixa 1: erguida por todos, IR_ZONA B (lider 0)
+2026-10-09 10:19:11.300;1;seguindo o lider 0
+2026-10-09 10:19:11.301;2;seguindo o lider 0
+2026-10-09 10:19:11.374;3;seguindo o lider 0
+2026-10-09 10:19:13.600;0;entrou na passagem P1
+2026-10-09 10:19:14.000;0;saiu da passagem P1
+2026-10-09 10:19:16.300;0;entrou na passagem P2
+2026-10-09 10:19:16.700;0;saiu da passagem P2
+2026-10-09 10:19:18.700;0;chegou ao destino
+2026-10-09 10:19:19.296;-1;caixa 1 entregue na zona B (robos 0 1 2 3)
+2026-10-09 10:19:19.300;1;carga solta
+2026-10-09 10:19:19.300;0;carga solta
+2026-10-09 10:19:19.301;2;carga solta
+2026-10-09 10:19:19.374;3;carga solta
+2026-10-09 10:19:19.795;-1;caixa 2 (tam 1, baia 3 -> zona D): robos 0 indo para a baia
+2026-10-09 10:19:19.800;0;tarefa: ir para a baia (caixa 2)
+2026-10-09 10:19:21.800;0;entrou na passagem P2
+2026-10-09 10:19:22.200;0;saiu da passagem P2
+2026-10-09 10:19:24.500;0;entrou na passagem P1
+2026-10-09 10:19:24.900;0;saiu da passagem P1
+2026-10-09 10:19:26.401;0;chegou ao destino
+2026-10-09 10:19:26.798;-1;caixa 2: equipe completa na baia, ACOPLAR
+2026-10-09 10:19:26.900;0;carga erguida
+2026-10-09 10:19:27.295;-1;caixa 2: erguida por todos, IR_ZONA D (lider 0)
+2026-10-09 10:19:28.800;0;entrou na passagem P1
+2026-10-09 10:19:29.200;0;saiu da passagem P1
+2026-10-09 10:19:31.500;0;entrou na passagem P2
+2026-10-09 10:19:31.900;0;saiu da passagem P2
+2026-10-09 10:19:34.500;0;chegou ao destino
+2026-10-09 10:19:34.795;-1;caixa 2 entregue na zona D (robos 0)
+2026-10-09 10:19:34.800;0;carga solta
+2026-10-09 10:19:35.295;-1;sistema encerrado

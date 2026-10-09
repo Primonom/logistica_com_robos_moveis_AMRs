@@ -1,0 +1,28 @@
+# Cenário 4: caixa de tamanho 4 com só 3 robôs.
+# Esperado:
+#  - a caixa 1 (tamanho 4) fica esperando e NENHUM robô é reservado;
+#  - a caixa 2 (tamanho 1, outra baia) também espera: a fila para quando
+#    falta robô (ordem estrita, evita inanição da caixa grande);
+#  - o sistema continua respondendo (status, manual/auto);
+#  - criado o 4º robô, a caixa 1 é atendida pelos 4; depois a caixa 2.
+novo 20 15
+novo 22 15
+novo 24 15
+aguarda 2 DISPONIVEL
+caixa 4 1 B
+caixa 1 3 D
+espera 2
+status
+manual 2
+aguarda 2 MANUAL
+auto 2
+aguarda 2 DISPONIVEL
+novo 26 15
+aguarda 3 OPERANDO_CARGA
+status
+aguarda 3 DISPONIVEL 60
+aguarda 0 OPERANDO_CARGA
+status
+aguarda 0 DISPONIVEL 60
+status
+sair

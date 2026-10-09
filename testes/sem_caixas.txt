@@ -1,0 +1,3 @@
+# Arquivo de caixas VAZIO, usado pelos cenários de teste: cada cenário
+# coloca as suas caixas com o comando "caixa" do Console, para que as
+# caixas de config/caixas.txt não interfiram no resultado.
