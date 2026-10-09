@@ -13,22 +13,29 @@ Estrutura:
     e atualiza os painéis. A thread do MQTT nunca mexe na interface.
   - A tela não decide nada: só mostra o que o C publica e envia comandos.
 """
+from pathlib import Path
+
 from nicegui import app, ui
 
 import cores
 from estado import Estado
 from mqtt_cliente import ClienteMqtt
 from paineis.cabecalho import Cabecalho
+from paineis.mapa import PainelMapa
 from paineis.robos import TabelaRobos
 
 PERIODO_TELA_S = 0.2   # mesmo período do atr/status
 
 estado = Estado()
 cliente_mqtt = ClienteMqtt(estado)
+# Arquivos locais (fonte do mapa): a apresentação não depende de internet.
+app.add_static_files("/static", Path(__file__).resolve().parent / "static")
 app.on_startup(cliente_mqtt.iniciar)
 app.on_shutdown(cliente_mqtt.parar)
 
 CSS = f"""
+@font-face {{ font-family: "Fredoka"; font-weight: 300 700;
+             src: url("/static/fontes/Fredoka.woff2") format("woff2"); }}
 body {{ background: {cores.FUNDO}; color: {cores.TEXTO}; }}
 .titulo {{ font-size: 1.5rem; font-weight: 700; letter-spacing: .02em; }}
 .subtitulo, .texto-fraco {{ color: {cores.TEXTO_FRACO}; font-size: .85rem; }}
@@ -46,6 +53,9 @@ body {{ background: {cores.FUNDO}; color: {cores.TEXTO}; }}
 .painel {{ background: {cores.PAINEL}; border: 1px solid {cores.BORDA}; }}
 .painel-titulo {{ font-size: 1.1rem; font-weight: 600; }}
 .tabela {{ background: transparent; }}
+.mapa {{ border-radius: 18px; overflow: hidden; }}
+.legenda-mapa {{ background: #f4f0e8; border-radius: 14px; padding: 4px 8px; overflow-x: auto; }}
+.legenda-mapa svg {{ max-width: 100%; height: auto; }}
 """
 
 
@@ -54,11 +64,13 @@ def pagina():
     ui.add_css(CSS)
     with ui.column().classes("w-full p-4 gap-4"):
         cabecalho = Cabecalho()
+        mapa = PainelMapa()
         robos = TabelaRobos()
 
     def atualizar():
         dados = estado.copia()   # cópia feita com a trava; o resto é fora dela
         cabecalho.atualizar(dados)
+        mapa.atualizar(dados)
         robos.atualizar(dados)
 
     atualizar()

@@ -32,7 +32,7 @@ class TestEstado(unittest.TestCase):
 
     def test_copia_nao_e_afetada_por_status_novo(self):
         e = Estado()
-        e.guardar_status(status(robos=[{"id": 0}]))
+        e.guardar_status(status(robos=[{"id": 0, "x": 1, "y": 1, "sp_x": 1, "sp_y": 1}]))
         c = e.copia()
         c["status"]["robos"].append({"id": 99})          # mexer na cópia...
         self.assertEqual(len(e.copia()["status"]["robos"]), 1)  # ...não muda a loja
@@ -46,6 +46,13 @@ class TestEstado(unittest.TestCase):
         e.guardar_status(status(entregues=3), agora=95.0)
         self.assertAlmostEqual(e.copia(agora=95.0)["entregas_por_minuto"], 0.0)
 
+    def test_entregas_por_minuto_nunca_negativo_se_o_sistema_reinicia(self):
+        e = Estado()
+        e.guardar_status(status(entregues=9), agora=0.0)
+        e.guardar_status(status(entregues=0), agora=5.0)    # sistema central reiniciado
+        e.guardar_status(status(entregues=1), agora=35.0)
+        self.assertAlmostEqual(e.copia(agora=35.0)["entregas_por_minuto"], 2.0)
+
     def test_eventos_limitados(self):
         e = Estado()
         for i in range(600):
@@ -53,6 +60,15 @@ class TestEstado(unittest.TestCase):
         eventos = e.copia()["eventos"]
         self.assertEqual(len(eventos), 500)
         self.assertEqual(eventos[-1]["texto"], "599")
+
+    def test_direcao_andando_e_parado(self):
+        e = Estado()
+        robo = {"id": 3, "x": 10, "y": 15, "sp_x": 10, "sp_y": 16}   # descendo
+        e.guardar_status(status(robos=[robo]))
+        self.assertAlmostEqual(e.copia()["direcoes"][3], 90.0)
+        robo = dict(robo, y=16)                                       # parou
+        e.guardar_status(status(robos=[robo]))
+        self.assertAlmostEqual(e.copia()["direcoes"][3], 90.0)       # mantém a última
 
     def test_duas_threads_ao_mesmo_tempo(self):
         """Uma thread escreve (como o MQTT) enquanto outra copia (como a tela)."""

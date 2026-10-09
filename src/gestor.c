@@ -132,6 +132,7 @@ static void iniciar_slot(int id, int x, int y)
     r->distancia_total = 0.0;
     r->destino_x = -1;          /* sem rota */
     r->destino_y = -1;
+    r->n_rota = 0;
     r->modo_automatico = true;
     r->carga_id = -1;
     r->pid = 0;
