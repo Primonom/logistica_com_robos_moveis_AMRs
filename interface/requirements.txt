@@ -1,0 +1,4 @@
+# Dependências da Tela de Operação (versões fixas, para ser reprodutível).
+# Instalar com: interface/.venv/bin/pip install -r interface/requirements.txt
+nicegui==3.17.1
+paho-mqtt==2.1.0

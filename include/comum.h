@@ -30,6 +30,7 @@
 #define PERIODO_STATUS_MS       200   /* T2 */
 #define PERIODO_ORGANIZADOR_MS  500   /* T3 */
 #define PERIODO_SIMULADOR_MS    100   /* simulador-stub (Etapa 1) */
+#define PERIODO_PONTE_MS        200   /* ponte MQTT: publica atr/status */
 
 /* Avança o instante "t" em "ms" milissegundos.
  * Usada nos laços periódicos: cada tarefa guarda o instante da PRÓXIMA
@@ -220,6 +221,7 @@ void *tarefa_coletor(void *arg);  /* thread (arg não usado) */
 void registrar_evento(mqd_t fila, int robo_id, const char *texto);
 void registrar_carga(mqd_t fila, const char *texto);
 void pedir_fim_coletor(mqd_t fila);
+void formatar_data_hora(struct timespec quando, char *saida, int tamanho);
 
 /* ---------- gestor.c ---------- */
 void *tarefa_gestor(void *arg);      /* thread (arg não usado) */
@@ -231,6 +233,9 @@ int pegar_robos_novos(void);         /* Organizador: quantos robôs novos desde 
 /* ---------- organizador.c ---------- */
 void *tarefa_organizador(void *arg); /* thread; arg = nome do arquivo de caixas */
 bool adicionar_caixa(int id, int tamanho, int baia, int zona); /* id < 0: automático */
+
+/* ---------- ponte_mqtt.c (processo central, Etapa 2) ---------- */
+void *tarefa_ponte_mqtt(void *arg);  /* thread (arg não usado) */
 
 /* ---------- sim_stub.c (processo central, só Etapa 1) ---------- */
 void *tarefa_simulador(void *arg);   /* thread (arg não usado) */
