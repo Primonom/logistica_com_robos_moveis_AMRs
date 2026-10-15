@@ -127,6 +127,13 @@ class TestMapaSvg(unittest.TestCase):
         for estado in ("DISPONIVEL", "DEFEITO", "RECARREGANDO", "MANUAL"):
             ET.fromstring(mapa_svg.svg_miniatura_robo(estado))
 
+    def test_caixa_fica_na_baia_ate_ser_erguida(self):
+        caixa = dict(CAIXA_EQUIPE)                     # EM_ANDAMENTO, baia 2
+        indo = status([dict(r, estado="DESLOCANDO") for r in EQUIPE], [caixa])
+        erguida = status(EQUIPE, [caixa])               # equipe em OPERANDO_CARGA
+        self.assertTrue(mapa_svg._caixas_nas_baias(MAPA, indo))
+        self.assertFalse(mapa_svg._caixas_nas_baias(MAPA, erguida))
+
     def test_texto_com_caracteres_especiais_fica_valido(self):
         mapa = dict(MAPA, zonas=[{"id": "<&>", "x": 56, "y": 4}])
         ET.fromstring(mapa_svg.svg_fundo(mapa))

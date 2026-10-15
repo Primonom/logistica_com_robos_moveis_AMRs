@@ -56,7 +56,7 @@ class PainelCaixas:
     def __init__(self, enviar):
         self.enviar = enviar
         self.linhas = None
-        with ui.card().classes("painel w-full h-full"):
+        with ui.card().classes("painel painel-caixas w-full h-full"):
             with ui.row().classes("w-full items-center justify-between"):
                 ui.label("Caixas").classes("painel-titulo")
                 self.mostrar_entregues = ui.switch("mostrar entregues", value=False) \

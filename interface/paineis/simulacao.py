@@ -7,6 +7,8 @@ Operação também faz o papel da tela do simulador).
   - Gerar defeito / tirar defeito e baixar a bateria de qualquer robô
     (escolhido na lista), sem precisar abrir o detalhe.
   - Incluir caixa: o formulário fica no painel Caixas.
+  - "Cenário de demonstração": roteiro em 5 atos para o vídeo (ver
+    demonstracao.py).
 
 Tudo vira uma linha de comando igual à do Console ("novo 10 5", "falha 2",
 "bateria 3 15"); quem valida e decide é o C.
@@ -15,9 +17,9 @@ from nicegui import ui
 
 
 class PainelSimulacao:
-    def __init__(self, enviar, modo_clique):
+    def __init__(self, enviar, modo_clique, iniciar_demonstracao):
         """modo_clique: dicionário da página {"novo_robo": bool}, lido pelo
-        clique do mapa."""
+        clique do mapa. iniciar_demonstracao: começa o cenário do vídeo."""
         self.enviar = enviar
         self.modo_clique = modo_clique
         self.ids = None
@@ -48,6 +50,11 @@ class PainelSimulacao:
                           on_click=lambda: self._cmd("bateria", f" {int(self.bateria.value)}")) \
                     .props("dense no-caps no-wrap unelevated color=amber-9")
             ui.label("Caixas novas: formulário no painel Caixas.").classes("dica")
+            ui.separator().props("dark")
+            ui.button("Cenário de demonstração", icon="movie", on_click=iniciar_demonstracao) \
+                .props("no-caps unelevated color=amber-8 text-color=black").classes("w-full")
+            ui.label("Para o vídeo: 5 atos com pausas para narrar. Use com o sistema "
+                     "recém-iniciado sem caixas (./logistica testes/sem_caixas.txt).").classes("dica")
 
     def _novo(self):
         if self.x.value is not None and self.y.value is not None:

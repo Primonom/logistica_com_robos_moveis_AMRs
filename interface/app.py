@@ -22,7 +22,9 @@ from estado import Estado
 from mqtt_cliente import ClienteMqtt
 from paineis.cabecalho import Cabecalho
 from paineis.caixas import PainelCaixas
+from paineis.demonstracao import Demonstracao
 from paineis.eventos import Notificador, PainelEventos
+from paineis.graficos import PainelGraficos
 from paineis.mapa import PainelMapa
 from paineis.simulacao import PainelSimulacao
 from paineis.robos import PainelDetalhe, PainelRobos
@@ -94,6 +96,14 @@ body {{ background: {cores.FUNDO}; color: {cores.TEXTO}; }}
 .lista-eventos {{ max-height: 420px; overflow-y: auto; }}
 .linha-evento {{ padding: 2px 0; border-bottom: 1px solid {cores.BORDA}; }}
 .evento-quem {{ font-size: .8rem; font-weight: 600; min-width: 62px; }}
+.grade-graficos {{ display: grid; gap: 12px; width: 100%;
+                   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }}
+.grafico-frota {{ height: 260px; background: #0e1729; border-radius: 10px; }}
+.faixa-roteiro {{ background: #2a2210; border: 2px solid #f59e0b; position: sticky; top: 6px;
+                  z-index: 50; padding: 10px 16px; }}
+.roteiro-titulo {{ font-family: Fredoka, sans-serif; font-size: 1.3rem; font-weight: 600; color: #fde68a; }}
+.roteiro-texto {{ color: #f8fafc; font-size: .95rem; }}
+.roteiro-esperando {{ color: #fbbf24; font-size: .85rem; margin-top: 2px; }}
 .q-drawer {{ background: {cores.PAINEL} !important; border-left: 1px solid {cores.BORDA}; }}
 .mapa {{ border-radius: 18px; overflow: hidden; }}
 .legenda-mapa {{ background: #f4f0e8; border-radius: 14px; padding: 4px 8px; overflow-x: auto; }}
@@ -125,12 +135,14 @@ def pagina():
         detalhe = PainelDetalhe(fechar_detalhe, enviar)
     with ui.column().classes("w-full p-4 gap-4"):
         cabecalho = Cabecalho()
+        demonstracao = Demonstracao(estado, enviar)   # faixa do roteiro (só aparece no cenário)
         mapa = PainelMapa(selecionar, enviar, modo_clique)
         robos = PainelRobos(selecionar, enviar)
         with ui.element("div").classes("linha-inferior"):
             caixas = PainelCaixas(enviar)
             eventos = PainelEventos()
-            simulacao = PainelSimulacao(enviar, modo_clique)
+            simulacao = PainelSimulacao(enviar, modo_clique, demonstracao.iniciar)
+        graficos = PainelGraficos()
     notificador = Notificador()
 
     def atualizar():
@@ -141,6 +153,7 @@ def pagina():
         caixas.atualizar(dados)
         eventos.atualizar(dados)
         simulacao.atualizar(dados)
+        graficos.atualizar(dados)
         notificador.atualizar(dados)
         if selecao["id"] is not None:
             detalhe.atualizar(dados)
