@@ -518,12 +518,23 @@ def _luzes_das_baias(mapa, status):
 VAGAS_BAIA = [(dx, dy) for dy in (-1.55, 0.0, 1.55) for dx in (-1.2, 1.2, -2.45, 2.45)]
 
 
+def _caixas_erguidas(status):
+    """Ids das caixas que já estão em cima de uma equipe (algum membro em
+    OPERANDO_CARGA)."""
+    return {r["carga"] for r in status["robos"] if r["estado"] == "OPERANDO_CARGA"}
+
+
 def _caixas_nas_baias(mapa, status):
-    """Caixas ESPERANDO empilhadas dentro da baia, em ordem de chegada. Leve
-    variação de posição calculada pelo id (determinística: não "treme")."""
+    """Caixas ainda NA BAIA, empilhadas em ordem de chegada: as que esperam
+    equipe e as que já têm equipe mas ainda não foram erguidas (a caixa só
+    sai da baia no acoplamento síncrono). Leve variação de posição
+    calculada pelo id (determinística: não "treme")."""
+    erguidas = _caixas_erguidas(status)
     p = []
     for b in mapa["baias"]:
-        fila = [c for c in status["caixas"] if c["baia"] == b["id"] and c["status"] == "ESPERANDO"]
+        fila = [c for c in status["caixas"] if c["baia"] == b["id"] and
+                (c["status"] == "ESPERANDO" or
+                 (c["status"] == "EM_ANDAMENTO" and c["id"] not in erguidas))]
         bx, by = centro(b["x"], b["y"])
         for c, (vx, vy) in zip(fila, VAGAS_BAIA):
             jx, jy = (c["id"] * 37) % 5 - 2, (c["id"] * 53) % 5 - 2

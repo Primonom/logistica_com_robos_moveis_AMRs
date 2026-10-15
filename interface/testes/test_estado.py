@@ -80,6 +80,7 @@ class TestEstado(unittest.TestCase):
         h = e.copia(agora=2.0)["historico"][2]
         self.assertEqual([round(t, 1) for t, _, _ in h], [0.0, 1.0])
         self.assertEqual(h[1][1], 85)
+        self.assertEqual([round(t, 1) for t, _ in e.copia()["historico_entregas"]], [0.0, 1.0])
 
     def test_sistema_iniciado_limpa_o_que_era_da_execucao_anterior(self):
         e = Estado()

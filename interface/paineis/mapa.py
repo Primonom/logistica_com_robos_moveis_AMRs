@@ -45,7 +45,7 @@ class PainelMapa:
         self.selecionado = None   # id do robô selecionado
         self.status = None        # último status e direções desenhados (para o clique)
         self.direcoes = {}
-        with ui.card().classes("painel w-full"):
+        with ui.card().classes("painel painel-mapa w-full"):
             with ui.row().classes("w-full items-center justify-between"):
                 ui.label("Mapa do galpão").classes("painel-titulo")
                 self.aviso = ui.label("aguardando o mapa do sistema central (atr/mapa)…") \

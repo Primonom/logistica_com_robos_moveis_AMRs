@@ -49,6 +49,7 @@ class Estado:
         self._amostras_entregas = deque()  # (instante, entregues) da última janela
         self._direcoes = {}              # id do robô -> ângulo em graus (0 = direita)
         self._historico = {}             # id -> deque de (instante, bateria, distância)
+        self._historico_entregas = deque(maxlen=int(HISTORICO_S / AMOSTRA_HISTORICO_S))
         self._ultima_amostra = None      # instante da última amostra do histórico
 
     # ---------- Escrita (chamadas pela thread do MQTT) ----------
@@ -83,6 +84,7 @@ class Estado:
                 # reaproveitados, então esquece o que era da execução anterior
                 self._eventos.clear()
                 self._historico.clear()
+                self._historico_entregas.clear()
                 self._direcoes.clear()
                 self._ultima_amostra = None
             self._seq_evento += 1
@@ -116,6 +118,7 @@ class Estado:
                 "entregas_por_minuto": self._entregas_por_minuto(),
                 "direcoes": dict(self._direcoes),
                 "historico": {rid: list(h) for rid, h in self._historico.items()},
+                "historico_entregas": list(self._historico_entregas),
             }
         return dados
 
@@ -127,6 +130,7 @@ class Estado:
             return
         self._ultima_amostra = agora
         tamanho = int(HISTORICO_S / AMOSTRA_HISTORICO_S)
+        self._historico_entregas.append((agora, status["contadores"]["entregues"]))
         for r in status["robos"]:
             h = self._historico.setdefault(r["id"], deque(maxlen=tamanho))
             h.append((agora, r["bateria"], r["distancia"]))

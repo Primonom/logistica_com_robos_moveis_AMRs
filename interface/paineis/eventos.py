@@ -100,14 +100,14 @@ class Notificador:
             resposta = dados["ultima_resposta"] or ""
             if resposta.startswith("erro:"):
                 ui.notify(f"Comando recusado — {resposta[5:].strip()}", type="negative",
-                          position="top-right", timeout=5000)
+                          position="bottom-right", timeout=5000)
 
     @staticmethod
     def _avisar_evento(e):
         texto = e["texto"].lower()
         if "defeito:" in texto:
             ui.notify(f"Robô {e['robo']} em DEFEITO", type="negative", icon="warning",
-                      position="top-right", timeout=6000)
+                      position="bottom-right", timeout=6000)
         elif "bateria baixa" in texto:
             ui.notify(f"Robô {e['robo']}: bateria baixa, indo recarregar", type="warning",
-                      icon="battery_alert", position="top-right", timeout=5000)
+                      icon="battery_alert", position="bottom-right", timeout=5000)
