@@ -66,7 +66,6 @@
 #include "comum.h"
 #include "mapa.h"
 
-#define BROKER_ENDERECO "localhost"
 #define BROKER_PORTA    1883
 #define MANTER_VIVO_S   10      /* keepalive do MQTT, em segundos */
 #define TAMANHO_JSON    16384   /* cabe 16 robôs + 64 caixas com folga */
@@ -74,6 +73,7 @@
 
 static struct mosquitto *cliente = NULL;  /* ver "Sincronização" no topo */
 static bool rede_iniciada = false;
+static const char *broker_endereco = "localhost";
 
 /* Texto JSON sendo montado aos pedaços. */
 typedef struct {
@@ -303,7 +303,7 @@ static void ao_conectar(struct mosquitto *mosq, void *dados, int codigo)
         printf("Ponte MQTT: conexao recusada (%s)\n", mosquitto_connack_string(codigo));
         return;
     }
-    printf("Ponte MQTT: conectada ao broker %s:%d\n", BROKER_ENDERECO, BROKER_PORTA);
+    printf("Ponte MQTT: conectada ao broker %s:%d\n", broker_endereco, BROKER_PORTA);
     /* A cada (re)conexão: assina de novo (o broker esquece as assinaturas
      * de um cliente "clean session") e republica o mapa. */
     mosquitto_subscribe(mosq, NULL, "atr/comando", 0);
@@ -353,6 +353,10 @@ static void ao_desconectar(struct mosquitto *mosq, void *dados, int codigo)
  * (ainda sem conectar; quem conecta é a thread da ponte). */
 void ponte_criar(void)
 {
+    const char *endereco_configurado = getenv("ATR_MQTT_HOST");
+
+    if (endereco_configurado != NULL && endereco_configurado[0] != '\0')
+        broker_endereco = endereco_configurado;
     mosquitto_lib_init();
     cliente = mosquitto_new("atr_logistica", true, NULL);
     if (cliente == NULL) { perror("mosquitto_new"); exit(1); }
@@ -386,7 +390,7 @@ void ponte_destruir(void)
  * biblioteca (que daí em diante cuida das reconexões) e retorna true. */
 static bool tentar_conectar(struct mosquitto *mosq, bool *avisou)
 {
-    if (mosquitto_connect(mosq, BROKER_ENDERECO, BROKER_PORTA, MANTER_VIVO_S)
+    if (mosquitto_connect(mosq, broker_endereco, BROKER_PORTA, MANTER_VIVO_S)
             != MOSQ_ERR_SUCCESS) {
         if (!*avisou) {
             printf("Ponte MQTT: broker fora do ar; o sistema segue e a ponte tenta de novo a cada 2 s\n");

@@ -14,6 +14,7 @@ Estrutura:
   - A tela não decide nada: só mostra o que o C publica e envia comandos.
 """
 from pathlib import Path
+import os
 
 from nicegui import app, ui
 
@@ -32,7 +33,11 @@ from paineis.robos import PainelDetalhe, PainelRobos
 PERIODO_TELA_S = 0.2   # mesmo período do atr/status
 
 estado = Estado()
-cliente_mqtt = ClienteMqtt(estado)
+cliente_mqtt = ClienteMqtt(
+    estado,
+    host=os.getenv("ATR_MQTT_HOST", "localhost"),
+    porta=int(os.getenv("ATR_MQTT_PORT", "1883")),
+)
 # Arquivos locais (fonte do mapa): a apresentação não depende de internet.
 app.add_static_files("/static", Path(__file__).resolve().parent / "static")
 app.on_startup(cliente_mqtt.iniciar)
@@ -162,9 +167,10 @@ def pagina():
     ui.timer(PERIODO_TELA_S, atualizar)
 
 
-# host 127.0.0.1: só aceita conexões desta máquina (o WSL repassa o
-#   localhost para o Windows, então o navegador do Windows abre normalmente).
+# ATR_UI_HOST permite escutar em 0.0.0.0 dentro de um container.
 # reload=False: sem recarregar ao editar arquivos (um processo só, simples).
 # show=False: não tenta abrir navegador de dentro do WSL.
-ui.run(host="127.0.0.1", port=8080, title="ATR · Tela de Operação",
+ui.run(host=os.getenv("ATR_UI_HOST", "127.0.0.1"),
+    port=int(os.getenv("ATR_UI_PORT", "8080")),
+    title="ATR · Tela de Operação",
        dark=True, reload=False, show=False, favicon="🤖")
