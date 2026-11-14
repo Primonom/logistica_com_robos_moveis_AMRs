@@ -108,4 +108,5 @@ class PainelCaixas:
         self.espera.set_text(
             f"⏳ Fila parada na caixa #{c['id']} (tamanho {c['tamanho']}, baia {c['baia']} → "
             f"zona {c['zona']}): precisa de {precisa} e há {livres}. Livre = disponível, em "
-            f"modo automático e com bateria ≥ 30%. As caixas de trás esperam (ordem de chegada).")
+            f"modo automático e com bateria para a tarefa inteira (≥ 30% e ≥ caminho até a baia, "
+            f"a zona e a estação ÷ 5 + 10). As caixas de trás esperam (ordem de chegada).")

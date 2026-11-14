@@ -7,9 +7,14 @@
  *   2) DEFEITO: com i_falha ou bateria 0%, muda o estado para DEFEITO e
  *      liga a flag "parar" (a Navegação segura a posição). Quando o defeito
  *      some, volta ao estado de antes e desliga "parar";
- *   3) BATERIA: robô DISPONIVEL, sem carga e com bateria < 20% -> liga
- *      "ir_recarregar" (com a estação de menor caminho A*) e muda para
- *      RECARREGANDO. Na estação, com 100%, volta para DISPONIVEL;
+ *   3) BATERIA: robô DISPONIVEL e sem carga vai recarregar se a bateria
+ *      for < 20% OU menor que o custo do caminho A* até a estação mais
+ *      próxima + MARGEM_BATERIA (comum.h). O piso de 20% sozinho não basta:
+ *      um robô parado longe das estações (ex.: numa zona do outro lado das
+ *      paredes) com 22% poderia precisar de 25% só para chegar lá, e
+ *      acabaria em 0% no caminho (DEFEITO para sempre). Liga "ir_recarregar"
+ *      (com essa estação) e muda para RECARREGANDO. Na estação, com 100%,
+ *      volta para DISPONIVEL;
  *   4) copia o hw para o BUFFER DE STATUS (e_posicao_x/y, j_sp_posicao_x/y,
  *      bateria, e_estado, distancia_total, destino_x/y, rota) e soma a
  *      distância percorrida. Estado, destino e rota vêm do estado_local
@@ -31,8 +36,10 @@
  *   - clock_nanosleep com tempo absoluto para o período (ver somar_ms).
  *   - estacao_mais_proxima usa o A* (mapa.c), que pode rodar ao mesmo
  *     tempo que o da Navegação: não tem problema, os vetores do A* são
- *     locais de cada chamada. É chamada com estado_local.mutex travado
- *     (só no ciclo em que a bateria fica baixa; leva poucos ms).
+ *     locais de cada chamada. É chamada a cada ciclo (robô sem carga), SEM
+ *     nenhum mutex travado: o resultado vai em variáveis locais e só
+ *     depois verificar_bateria trava o estado_local (assim a Navegação
+ *     nunca espera o A* da Status).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,15 +69,30 @@ static void verificar_defeito(bool defeito)
     if (saiu)   registrar_evento(fila_coletor, id_robo, "defeito resolvido");
 }
 
-/* 3) Manda recarregar ou termina a recarga. */
-static void verificar_bateria(int bateria, int carga_id, int x, int y)
+/* Bateria mínima para um robô SEM tarefa continuar DISPONIVEL: o piso de
+ * 20% ou, se for maior, o que ele gasta até a estação mais próxima
+ * ("passos" = tamanho do caminho A* até ela) + a margem. */
+static int limite_recarga(int passos)
+{
+    int limite = passos / CELULAS_POR_PORCENTO + MARGEM_BATERIA;
+
+    if (passos < 0 || limite < BATERIA_RECARREGAR)
+        return BATERIA_RECARREGAR;
+    return limite;
+}
+
+/* 3) Manda recarregar ou termina a recarga. (ex, ey) = estação mais
+ * próxima e "passos" até ela, calculados antes, fora do mutex. */
+static void verificar_bateria(int bateria, int carga_id, int x, int y,
+                              int passos, int ex, int ey)
 {
     bool mandou = false, terminou = false;
 
     pthread_mutex_lock(&estado_local.mutex);
     if (estado_local.estado == DISPONIVEL && carga_id == -1 &&
-        bateria < BATERIA_RECARREGAR) {
-        estacao_mais_proxima(x, y, &estado_local.recarga_x, &estado_local.recarga_y);
+        bateria < limite_recarga(passos)) {
+        estado_local.recarga_x = ex;
+        estado_local.recarga_y = ey;
         estado_local.ir_recarregar = true;
         estado_local.estado = RECARREGANDO;
         mandou = true;
@@ -123,7 +145,7 @@ void *tarefa_status(void *arg)
     Robo *r = &mem->robos[id_robo];
     struct timespec proximo;
     bool falha;
-    int bateria, carga_id, x, y, destino_x, destino_y, k;
+    int bateria, carga_id, x, y, destino_x, destino_y, k, passos, ex, ey;
     Estado estado;
     CopiaRota rota;
 
@@ -140,7 +162,14 @@ void *tarefa_status(void *arg)
         pthread_mutex_unlock(&r->mutex);
 
         verificar_defeito(falha || bateria == 0);
-        verificar_bateria(bateria, carga_id, x, y);
+        /* A* até a estação fora de qualquer mutex. Só faz sentido sem carga
+         * (com carga o robô nunca é mandado recarregar). */
+        passos = -1;
+        ex = ESTACAO_X[0];
+        ey = ESTACAO_Y[0];
+        if (carga_id == -1)
+            passos = estacao_mais_proxima(x, y, &ex, &ey);
+        verificar_bateria(bateria, carga_id, x, y, passos, ex, ey);
 
         pthread_mutex_lock(&estado_local.mutex);
         estado = estado_local.estado;

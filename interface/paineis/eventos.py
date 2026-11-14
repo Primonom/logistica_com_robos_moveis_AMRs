@@ -4,6 +4,8 @@ eventos.py — Log de eventos ao vivo e notificações (toasts).
   PainelEventos  o atr/eventos ao vivo (mais recente em cima), com filtro por
                  robô e por tipo; cor e ícone pela categoria do evento
                  (cores.categoria_evento: só aparência, tirada do texto).
+                 Registros de carga ("4;2;D;0") aparecem formatados
+                 (cores.texto_evento): "Caixa 4: baia 2 → zona D (robôs 0)".
                  O botão "Carregar histórico do disco" envia "historico 50"
                  e mostra a resposta (últimas linhas de logs/eventos.csv e
                  logs/cargas.csv, lidas pelo C) numa caixa de texto.
@@ -104,7 +106,7 @@ class PainelEventos:
             ui.icon(cat["icone"]).style(f"color: {cat['cor']}; font-size: 16px; margin-top: 2px")
             ui.label(e["data_hora"][11:23]).classes("evento-hora")
             ui.label(quem).classes("evento-quem").style(f"color: {cat['cor']}")
-            ui.label(e["texto"]).classes("evento-texto")
+            ui.label(cores.texto_evento(e)).classes("evento-texto")
 
 
 class Notificador:

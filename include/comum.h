@@ -125,10 +125,22 @@ typedef enum {
 
 #define TAMANHO_MAX_CAIXA 4   /* = máximo de robôs numa equipe */
 
-/* Limites de bateria (em %). Como 30 > 20, um robô que o Organizador
- * acabou de escolher nunca está, ao mesmo tempo, sendo mandado recarregar. */
-#define BATERIA_MINIMA_TAREFA 30  /* Organizador só escolhe robô com >= 30% */
-#define BATERIA_RECARREGAR    20  /* Status manda recarregar com < 20% */
+/* Bateria (em %). O simulador gasta 1% a cada CELULAS_POR_PORCENTO células
+ * andadas; o Organizador e a Status usam o MESMO valor para estimar quanto
+ * um caminho A* vai gastar: custo = passos / CELULAS_POR_PORCENTO.
+ *   - Organizador: só escolhe o robô se bateria >= BATERIA_MINIMA_TAREFA
+ *     (piso) E >= custo da tarefa INTEIRA (robô -> baia -> zona -> estação
+ *     mais próxima da zona) + MARGEM_BATERIA;
+ *   - Status: robô DISPONIVEL e sem carga vai recarregar se bateria <
+ *     BATERIA_RECARREGAR OU < custo (robô -> estação mais próxima) +
+ *     MARGEM_BATERIA.
+ * O custo da tarefa termina numa estação, então (quase sempre) é maior que
+ * o custo de ir direto à estação: as duas decisões não se sobrepõem. O caso
+ * raro está em docs/EXPLICACAO.md ("Bateria suficiente para a tarefa"). */
+#define CELULAS_POR_PORCENTO  5   /* bateria cai 1% a cada 5 células andadas */
+#define MARGEM_BATERIA        10  /* folga (desvios, seguidores fora da linha) */
+#define BATERIA_MINIMA_TAREFA 30  /* piso: Organizador nunca escolhe com < 30% */
+#define BATERIA_RECARREGAR    20  /* piso: Status sempre manda recarregar com < 20% */
 
 /* Uma caixa a ser transportada de uma baia até uma zona. */
 typedef struct {
@@ -200,7 +212,8 @@ typedef enum {
     MODO_AUTO,
     GOTO,
     PAUSAR,      /* equipe com robô em DEFEITO: segura a posição */
-    CONTINUAR    /* defeito resolvido: volta a andar */
+    CONTINUAR,   /* defeito resolvido: volta a andar */
+    RECARREGAR   /* Organizador: bateria não basta para a caixa, vá recarregar */
 } TipoMensagem;
 
 /* Mensagem da fila /atr_robo_<id>. */

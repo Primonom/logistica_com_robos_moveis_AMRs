@@ -15,10 +15,9 @@
  *
  * Regras de atribuição:
  *   - Uma caixa só é atribuída quando TODOS os robôs necessários estão
- *     DISPONIVEL, em modo automático e com bateria >= 30% NO MESMO CICLO
- *     (a bateria mínima evita começar um transporte quase sem carga). Nunca se reserva uma
- *     equipe parcial. Isso evita deadlock: se o Organizador "segurasse"
- *     2 robôs para uma caixa de 3 e outros 2 para outra caixa de 3, as duas
+ *     DISPONIVEL, em modo automático e com BATERIA SUFICIENTE NO MESMO
+ *     CICLO. Nunca se reserva uma equipe parcial. Isso evita deadlock:
+ *     se o Organizador "segurasse" 2 robôs para uma caixa de 3 e outros 2 para outra caixa de 3, as duas
  *     ficariam esperando para sempre (cada uma segura parte dos recursos e
  *     espera o resto). Sem reserva parcial, não existe "segura e espera".
  *   - Uma carga por baia de cada vez (equipes[] é indexado pela baia).
@@ -39,6 +38,15 @@
  *     baia dela libera ela é a primeira candidata, com a regra acima
  *     segurando a fila até juntar a equipe dela.
  *
+ * Bateria suficiente (otimização das cargas, ponto extra):
+ *   - custo da tarefa de um robô = (passos A* robô -> baia + baia -> zona
+ *     + zona -> estação mais próxima) / CELULAS_POR_PORCENTO +
+ *     MARGEM_BATERIA. O robô só serve se bateria >= esse custo e >= 30%
+ *     (piso). Assim ele termina a entrega e ainda chega a uma estação;
+ *   - robôs que só ficaram de fora por bateria, quando a caixa da vez está
+ *     esperando equipe, recebem RECARREGAR: vão recarregar já, em vez de
+ *     ficarem parados com uma bateria que não serve para nada.
+ *
  * Escolha da equipe com IA (A*, mapa.c):
  *   - "mais próximo" = MENOR CAMINHO A* do robô até a baia (desvia de
  *     paredes e obstáculos e já conta o custo das passagens cheias), e
@@ -49,8 +57,8 @@
  *     primeiro escolhido (empate: menor id, porque a escolha percorre os
  *     ids em ordem e só troca por um caminho ESTRITAMENTE menor).
  *
- * Leitura dos robôs: SÓ o buffer de status (e_estado, e_posicao_x/y) e
- * modo_automatico, NUNCA o hw.
+ * Leitura dos robôs: SÓ o buffer de status (e_estado, e_posicao_x/y,
+ * bateria) e modo_automatico, NUNCA o hw.
  *
  * Sincronização:
  *   - mutex de cada robô (PROCESS_SHARED): lê o buffer de status e escreve
@@ -59,7 +67,8 @@
  *   - mem->mutex_caixas: a fila de caixas também é alterada pelo Console
  *     (comando "caixa"); o mutex impede alterações simultâneas.
  *   - filas /atr_robo_<id> (enviar_para_robo): comandos para os robôs. O
- *     ACOPLAR vai para todos no mesmo ciclo (acoplamento síncrono).
+ *     ACOPLAR vai para todos no mesmo ciclo (acoplamento síncrono). O
+ *     RECARREGAR também vai por elas (não mexe no estado do robô direto).
  *   - pegar_robos_novos(): aviso assíncrono do Gestor (ver gestor.c).
  *   - equipes[] e em_equipe[] só são usados por esta thread: sem mutex.
  *   - calcular_caminho (A*): lê mem->mapa (só leitura) e a ocupação das
@@ -319,21 +328,28 @@ static void acompanhar_equipe(Equipe *e)
     }
 }
 
-/* Escolhe até "tamanho" robôs livres, os de MENOR CAMINHO A* até
- * (bx, by), em ordem crescente de caminho (escolhidos[0] = o mais perto).
- * Livre = DISPONIVEL, automático e com bateria >= BATERIA_MINIMA_TAREFA
- * (pelo buffer de status), fora de equipe e com caminho até a baia.
- * Retorna quantos achou (pode ser menos que "tamanho"). */
-static int escolher_robos(int tamanho, int bx, int by, int escolhidos[])
+/* Escolhe até c->tamanho robôs livres para a caixa c, os de MENOR
+ * CAMINHO A* até a baia, em ordem crescente de caminho (escolhidos[0] = o
+ * mais perto). Livre = DISPONIVEL, automático (pelo buffer de status),
+ * fora de equipe, com caminho até a baia e com bateria suficiente para a
+ * tarefa inteira (ver o topo). sem_bateria[i] = true se o robô i só não
+ * serviu por causa da bateria.
+ * Retorna quantos achou (pode ser menos que c->tamanho). */
+static int escolher_robos(const Caixa *c, int escolhidos[], bool sem_bateria[])
 {
     int distancia[MAX_ROBOS];
-    Caminho c;
-    int i, k, x, y, bateria, n = 0, melhor;
+    int bx = BAIA_X[c->baia - 1], by = BAIA_Y[c->baia - 1];
+    int zx = ZONA_X[c->zona], zy = ZONA_Y[c->zona];
+    int i, k, x, y, ex, ey, bateria, n = 0, melhor, ate_baia, resto, custo;
     Estado estado;
     bool automatico, ativo;
 
+    /* Trechos iguais para todos: baia -> zona -> estação mais próxima. */
+    resto = passos_caminho(bx, by, zx, zy) + estacao_mais_proxima(zx, zy, &ex, &ey);
+
     for (i = 0; i < MAX_ROBOS; i++) {
         distancia[i] = -1; /* -1 = não serve */
+        sem_bateria[i] = false;
         pthread_mutex_lock(&mem->robos[i].mutex);
         ativo = mem->robos[i].ativo;
         automatico = mem->robos[i].modo_automatico;
@@ -341,14 +357,21 @@ static int escolher_robos(int tamanho, int bx, int by, int escolhidos[])
         if (!ativo || !automatico || em_equipe[i])
             continue;
         ler_status(i, &estado, &x, &y, &bateria);
+        if (estado != DISPONIVEL)
+            continue;
         /* A* fora de qualquer mutex (o ler_status já soltou o do robô). */
-        if (estado == DISPONIVEL && bateria >= BATERIA_MINIMA_TAREFA &&
-            calcular_caminho(x, y, bx, by, &c))
-            distancia[i] = c.n - 1;   /* número de passos */
+        ate_baia = passos_caminho(x, y, bx, by);
+        if (ate_baia < 0)
+            continue;                 /* sem caminho até a baia */
+        custo = (ate_baia + resto) / CELULAS_POR_PORCENTO + MARGEM_BATERIA;
+        if (bateria >= BATERIA_MINIMA_TAREFA && bateria >= custo)
+            distancia[i] = ate_baia;
+        else
+            sem_bateria[i] = true;
     }
     /* Seleção simples: pega o mais próximo, depois o próximo, ...
      * (empate: menor id, porque só troca com "<"). */
-    for (k = 0; k < tamanho; k++) {
+    for (k = 0; k < c->tamanho; k++) {
         melhor = -1;
         for (i = 0; i < MAX_ROBOS; i++)
             if (distancia[i] >= 0 && (melhor == -1 || distancia[i] < distancia[melhor]))
@@ -438,17 +461,38 @@ static void informar_espera(int caixa_id, int livres)
     pthread_mutex_unlock(&mem->mutex_caixas);
 }
 
+/* Manda RECARREGAR os robôs que só ficaram de fora por causa da bateria. */
+static void mandar_recarregar(const bool sem_bateria[], int caixa_id)
+{
+    MensagemRobo msg = {0};
+    char texto[128];
+    int i;
+
+    msg.tipo = RECARREGAR;
+    for (i = 0; i < MAX_ROBOS; i++) {
+        if (!sem_bateria[i])
+            continue;
+        enviar_para_robo(i, &msg);
+        snprintf(texto, sizeof(texto), "robo %d sem bateria para a caixa %d: RECARREGAR",
+                 i, caixa_id);
+        avisar(texto);
+    }
+}
+
 static void atribuir_caixas(void)
 {
     int membros[TAMANHO_MAX_CAIXA];
+    bool sem_bateria[MAX_ROBOS];
     char texto[128];
     Caixa c;
     int indice, n;
 
     while ((indice = primeira_da_fila(&c)) != -1) {
-        n = escolher_robos(c.tamanho, BAIA_X[c.baia - 1], BAIA_Y[c.baia - 1], membros);
+        n = escolher_robos(&c, membros, sem_bateria);
         if (n < c.tamanho) {
-            /* Equipe incompleta: NÃO reserva ninguém e a fila espera. */
+            /* Equipe incompleta: NÃO reserva ninguém e a fila espera. Quem
+             * ficou de fora só pela bateria vai recarregar enquanto isso. */
+            mandar_recarregar(sem_bateria, c.id);
             informar_espera(c.id, n);
             if (ultima_avisada != c.id) {
                 snprintf(texto, sizeof(texto), "caixa %d (tam %d) aguardando equipe: %d robo(s) livre(s)",

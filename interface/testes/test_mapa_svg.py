@@ -10,6 +10,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+import cores
 import mapa_svg
 
 # O atr/mapa publicado pelo C com ATR_SEMENTE=42 (copiado de uma execução real).
@@ -84,13 +85,19 @@ class TestMapaSvg(unittest.TestCase):
         self.assertEqual(len(pas["regiao"]), len(pas["celulas"]) + 2)   # + uma boca de cada lado
         self.assertTrue(all(c[1] == y for c in pas["regiao"]))
 
-    def test_corredor_nao_atravessa_paredes(self):
-        trechos = mapa_svg._faixas_do_corredor(MAPA)
-        paredes = {x for r in MAPA["paredes"] if r["y1"] <= MAPA["corredor_y"] <= r["y2"]
-                   for x in range(r["x1"], r["x2"] + 1)}
-        for x1, x2 in trechos:
-            self.assertFalse(paredes & set(range(x1, x2 + 1)))
-        self.assertEqual(len(trechos), 4)                        # 3 paredes cortam em 4 trechos
+    def test_sem_faixas_de_corredor_no_fundo(self):
+        # sem a faixa horizontal do antigo corredor y = 15 e sem as faixas
+        # verticais de acesso: o único retângulo amarelo com borda é a régua
+        fundo = mapa_svg.svg_fundo(MAPA)
+        self.assertEqual(fundo.count(f'fill="{cores.FAIXA}" stroke="{cores.FAIXA_BORDA}"'), 2)
+        self.assertNotIn(f'fill="{cores.FAIXA}" opacity', fundo)
+
+    def test_nenhum_obstaculo_nas_areas_de_baias_e_zonas(self):
+        # o C não sorteia obstáculo dentro dos retângulos que a tela desenha
+        for ponto, lado in [(b, "esq") for b in MAPA["baias"]] + [(z, "dir") for z in MAPA["zonas"]]:
+            x1, y1, x2, y2 = mapa_svg.regiao(ponto, MAPA, lado)
+            for x, y in MAPA["obstaculos"]:
+                self.assertFalse(x1 <= x <= x2 and y1 <= y <= y2, (ponto, x, y))
 
     def test_cancela_fecha_quando_a_passagem_enche(self):
         aberta = mapa_svg._todas_as_cancelas(MAPA, status([], livres=(4, 2, 1, 3)), fechadas=True)

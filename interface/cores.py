@@ -67,8 +67,20 @@ def categoria_evento(evento):
     return "outros"
 
 
+def texto_evento(evento):
+    """Texto de um evento para mostrar na tela. Os registros de CARGA vêm do
+    C no formato do logs/cargas.csv, "id;baia;zona;robôs" (ex.: "4;2;D;0 3"),
+    e viram "Caixa 4: baia 2 → zona D (robôs 0, 3)". Os outros eventos
+    ficam como vieram."""
+    partes = evento["texto"].split(";")
+    if evento["tipo"] != "carga" or len(partes) != 4:
+        return evento["texto"]
+    caixa, baia, zona, robos = partes
+    return f"Caixa {caixa}: baia {baia} → zona {zona} (robôs {', '.join(robos.split())})"
+
+
 def da_bateria(pct):
-    """Cor da bateria: vermelho < 20% (recarga), âmbar < 30% (não pega tarefa)."""
+    """Cor da bateria: vermelho < 20% (recarga), âmbar < 30% (piso: abaixo disso nunca pega tarefa)."""
     if pct < 20:
         return ERRO
     if pct < 30:
@@ -83,7 +95,7 @@ PISO = "#E9E4DA"
 PISO_PLACA = "#E2DCD0"        # placas de piso alternadas
 PAREDE = "#5B5F6B"
 PILAR = "#474A54"
-FAIXA = "#F6C945"             # corredor / faixas de circulação
+FAIXA = "#F6C945"             # régua tipo "trena"
 FAIXA_BORDA = "#E0A800"
 PAPELAO = "#C99A5B"
 PAPELAO_FITA = "#E8D3A6"

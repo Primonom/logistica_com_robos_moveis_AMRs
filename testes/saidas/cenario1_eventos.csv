@@ -1,21 +1,21 @@
-2026-11-14 16:58:12.244;-1;sistema iniciado
-2026-11-14 16:58:12.244;-1;mapa gerado com semente 42
-2026-11-14 16:58:12.246;0;robo criado (pid 8017) em (8,15)
-2026-11-14 16:58:12.246;-1;1 robo(s) novo(s) na frota
-2026-11-14 16:58:12.248;0;robo vivo
-2026-11-14 16:58:12.748;0;tarefa: ir para a baia (caixa 1)
-2026-11-14 16:58:12.748;-1;caixa 1 (tam 1, baia 1 -> zona A): robos 0 indo para a baia
-2026-11-14 16:58:14.348;0;chegou ao destino
-2026-11-14 16:58:14.753;-1;caixa 1: equipe completa na baia, ACOPLAR
-2026-11-14 16:58:14.848;0;carga erguida
-2026-11-14 16:58:15.247;-1;caixa 1: erguida por todos, IR_ZONA A (lider 0)
-2026-11-14 16:58:16.848;0;entrou na passagem P1
-2026-11-14 16:58:17.548;0;saiu da passagem P1
-2026-11-14 16:58:18.448;0;entrou na passagem P3
-2026-11-14 16:58:19.148;0;saiu da passagem P3
-2026-11-14 16:58:21.048;0;entrou na passagem P4
-2026-11-14 16:58:21.748;0;saiu da passagem P4
-2026-11-14 16:58:24.648;0;chegou ao destino
-2026-11-14 16:58:24.748;0;carga solta
-2026-11-14 16:58:24.749;-1;caixa 1 entregue na zona A (robos 0)
-2026-11-14 16:58:25.247;-1;sistema encerrado
+2026-11-14 17:30:58.676;-1;sistema iniciado
+2026-11-14 17:30:58.676;-1;mapa gerado com semente 42
+2026-11-14 17:30:58.678;0;robo criado (pid 9573) em (8,15)
+2026-11-14 17:30:58.682;-1;1 robo(s) novo(s) na frota
+2026-11-14 17:30:58.685;0;robo vivo
+2026-11-14 17:30:59.185;0;tarefa: ir para a baia (caixa 1)
+2026-11-14 17:30:59.187;-1;caixa 1 (tam 1, baia 1 -> zona A): robos 0 indo para a baia
+2026-11-14 17:31:00.785;0;chegou ao destino
+2026-11-14 17:31:01.181;-1;caixa 1: equipe completa na baia, ACOPLAR
+2026-11-14 17:31:01.285;0;carga erguida
+2026-11-14 17:31:01.682;-1;caixa 1: erguida por todos, IR_ZONA A (lider 0)
+2026-11-14 17:31:03.285;0;entrou na passagem P1
+2026-11-14 17:31:03.985;0;saiu da passagem P1
+2026-11-14 17:31:05.086;0;entrou na passagem P3
+2026-11-14 17:31:05.786;0;saiu da passagem P3
+2026-11-14 17:31:07.685;0;entrou na passagem P4
+2026-11-14 17:31:08.385;0;saiu da passagem P4
+2026-11-14 17:31:11.185;0;chegou ao destino
+2026-11-14 17:31:11.682;-1;caixa 1 entregue na zona A (robos 0)
+2026-11-14 17:31:11.685;0;carga solta
+2026-11-14 17:31:12.181;-1;sistema encerrado

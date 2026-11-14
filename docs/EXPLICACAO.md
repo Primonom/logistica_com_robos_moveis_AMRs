@@ -179,7 +179,7 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
 - **Onde:** criadas pelo Gestor; enviadas por `gestor.c: enviar_para_robo`
   (usada pelo Organizador e pelo Console); lidas em `navegacao.c: ler_mensagens`.
 - **Problema:** mandar comandos (`TAREFA_IR_BAIA`, `ACOPLAR`, `IR_ZONA`,
-  `SOLTAR`, `PAUSAR`, `CONTINUAR`, `GOTO`, `MODO_MANUAL/AUTO`) de outro
+  `SOLTAR`, `PAUSAR`, `CONTINUAR`, `RECARREGAR`, `GOTO`, `MODO_MANUAL/AUTO`) de outro
   processo, sem perder nenhum e na ordem certa.
 - **Sem ela:** seria preciso um "campo de comando" na memória compartilhada;
   um segundo comando poderia sobrescrever o primeiro antes de ser lido.
@@ -339,9 +339,14 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
   mantém o setpoint na posição atual. Sem a flag, a Navegação continuaria
   mandando o robô andar.
 - `ir_recarregar` (Status → Navegação): robô `DISPONIVEL`, sem carga e com
-  bateria < 20% vai para a estação de **menor caminho A*** (não a mais perto
-  em linha reta: pode haver parede no meio). A Navegação lê e zera a
-  flag sob o mutex (o pedido é atendido uma vez só).
+  bateria < 20% **ou** menor que o custo do caminho até a estação + 10 (ver
+  6.4) vai para a estação de **menor caminho A*** (não a mais perto em linha
+  reta: pode haver parede no meio). A Navegação lê e zera a flag sob o mutex
+  (o pedido é atendido uma vez só). A `TAREFA_IR_BAIA` também zera a flag
+  (ver 6.4, "por que não há corrida").
+- O A* da Status até a estação roda **fora** de qualquer mutex (resultado em
+  variáveis locais); só depois `verificar_bateria` trava o `estado_local`.
+  Assim a Navegação nunca fica esperando o A* da outra thread.
 
 ---
 
@@ -372,7 +377,8 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
 
 ### 6.2 Sem equipe parcial (evita deadlock)
 - A caixa só é atribuída quando **todos** os robôs necessários estão
-  `DISPONIVEL`, automáticos e com bateria >= 30% no mesmo ciclo.
+  `DISPONIVEL`, automáticos e com bateria suficiente para a tarefa
+  inteira (6.4) no mesmo ciclo.
 - **Sem a regra:** reservando 2 robôs para uma caixa de 3 e outros 2 para
   outra caixa de 3, as duas esperariam para sempre (cada uma segura parte e
   espera o resto) — "segura e espera" + espera circular. Sem reserva
@@ -390,10 +396,63 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
   nenhuma caixa mais nova da mesma baia passa na frente; quando a baia libera,
   a caixa pulada é a primeira candidata.
 
-### 6.4 Bateria: limites 30% e 20%
-- O Organizador só escolhe robôs com >= 30%; a Status só manda recarregar com
-  < 20% e sem carga. Como 30 > 20, um robô recém-escolhido nunca é mandado
-  recarregar ao mesmo tempo (não há corrida entre as duas decisões).
+### 6.4 Bateria suficiente para a tarefa (otimização das cargas)
+Faz parte da "otimização de cada carga" do ponto extra +3 (seção 7): a IA
+(A*) também é usada para decidir **se** o robô aguenta a tarefa.
+
+- **Onde:** `organizador.c: escolher_robos` e `mandar_recarregar`;
+  `status.c: verificar_bateria` / `limite_recarga`; `navegacao.c`
+  (`RECARREGAR` e `TAREFA_IR_BAIA`); constantes em `comum.h`
+  (`CELULAS_POR_PORCENTO` = 5, `MARGEM_BATERIA` = 10, pisos 30 e 20).
+- **Problema:** com as rotas A* (que contornam as paredes pelas passagens)
+  uma entrega pode gastar **mais de 30%**. Com a regra antiga ("escolhe com
+  >= 30%") um robô do outro lado do galpão com 31% era escolhido e chegava a
+  0% no meio do caminho (DEFEITO para sempre). E a regra "recarrega com
+  < 20%" deixava um robô parado longe das estações com 22% sem bateria para
+  chegar a uma delas.
+- **Como (Organizador):** custo da tarefa de cada robô = (passos A* robô →
+  baia + baia → zona + zona → estação mais próxima da zona) /
+  `CELULAS_POR_PORCENTO` + 10. Ele só serve se a bateria for >= esse custo
+  **e** >= 30% (piso). O trecho até a estação garante que, depois de soltar
+  a caixa, ele ainda consegue ir recarregar. O `CELULAS_POR_PORCENTO` está
+  em `comum.h` para o Organizador, a Status e o simulador usarem o mesmo
+  valor (o simulador é quem gasta a bateria).
+- **Como (pedido de recarga):** se a caixa da vez fica sem equipe, os robôs
+  que só ficaram de fora **por causa da bateria** recebem `RECARREGAR` pela
+  fila `/atr_robo_<id>` (evento "robo N sem bateria para a caixa M:
+  RECARREGAR"). A Navegação, se ainda está `DISPONIVEL`, vai para a estação
+  de menor caminho como `RECARREGANDO`, e a Status a devolve a `DISPONIVEL`
+  com 100%. Sem isso o robô ficaria parado para sempre com uma bateria que
+  não serve para a caixa (e a fila esperando por ele).
+- **Como (Status):** robô `DISPONIVEL` e sem carga vai recarregar se a
+  bateria for < 20% **ou** < custo do caminho até a estação mais próxima +
+  10. Exemplo: parado numa zona a 125 passos da estação, o custo é 25 + 10 =
+  35%; com 30% ele já vai recarregar (pela regra antiga ficaria parado e,
+  com a próxima tarefa, podia não chegar).
+- **Por que não há corrida entre as duas decisões:**
+  1. as condições quase nunca valem juntas: o Organizador exige bateria >=
+     custo de um trajeto que **termina numa estação** (robô → baia → zona →
+     estação) + 10, e a Status só dispara abaixo de (robô → estação) + 10 (ou
+     de 20, e o piso do Organizador é 30). Ir direto à estação nunca é mais
+     longo que passar pela baia e pela zona antes; e o robô `DISPONIVEL` está
+     parado, então a bateria não muda entre as duas leituras;
+  2. depois de escolhido, o Organizador escreve `carga_id` no slot **antes**
+     de mandar `TAREFA_IR_BAIA`, e a Status só manda recarregar com
+     `carga_id == -1`: dali em diante ela não dispara mais;
+  3. sobra uma janela rara: o A* considera a ocupação das passagens, então
+     os dois cálculos (feitos em instantes diferentes) podem dar caminhos um
+     pouco diferentes. Se a Status ligar `ir_recarregar` no mesmo instante em
+     que a tarefa chega, a `TAREFA_IR_BAIA` **apaga** o pedido (sob o
+     `estado_local.mutex`) e a tarefa vence. Isso é seguro porque o
+     Organizador já conferiu que a bateria basta para a tarefa **e** para ir
+     à estação depois. Sem esse apagar, a Navegação leria a mensagem e, no
+     mesmo ciclo, a flag, e trocaria o destino da baia pela estação: a
+     equipe ficaria esperando um robô que foi recarregar.
+  4. O `RECARREGAR` do Organizador e o `ir_recarregar` da Status nunca se
+     atrapalham: os dois só valem com o robô `DISPONIVEL` e levam à mesma
+     estação (a de menor caminho).
+- **Sem isso:** robôs em DEFEITO por bateria 0% no meio de entregas (equipe
+  pausada para sempre, 6.5) — o cenário 7 mostra isso com o código antigo.
 - A recarga só é disparada para robô **sem carga**: no cenário 3 o líder fica
   com 28% no começo do transporte (cerca de 23% no meio), entrega a caixa e só depois vai recarregar.
 
@@ -433,8 +492,12 @@ Organizador).
      linha, e a região inclui uma boca de cada lado;
   4. 45 obstáculos de 1 célula em células livres, **proibidos** em paredes,
      regiões de passagem, num quadrado de raio 2 em volta das bocas (para a
-     porta nunca ficar bloqueada), baias, zonas, estações, posição padrão e
-     na linha y = 15 inteira (corredor principal sempre largo).
+     porta nunca ficar bloqueada), estações, posição padrão, na linha
+     y = 15 inteira e nas **áreas** das baias e zonas (os retângulos
+     coloridos que a tela desenha: da parede até 3 células depois do ponto e
+     3 acima/abaixo dele, `mapa.c: area_de_baia_ou_zona`), não só na célula
+     do ponto. A tela não desenha mais faixa de corredor nem faixas de
+     acesso: o caminho real é o do A*.
 - **Validação com BFS (busca em largura):** a partir de cada baia, visita
   todas as células livres alcançáveis (fila simples num vetor). Se alguma
   zona, estação ou a posição padrão não foi visitada, o mapa é descartado e
@@ -570,7 +633,8 @@ Organizador).
   custo) e **completo** (se existe caminho, acha).
 - A "otimização das rotas de cada robô" é o A* com custo dinâmico (desvia de
   passagens cheias e replaneja); a "de cada carga" é o Organizador usando o
-  mesmo A* para escolher a equipe e o líder.
+  mesmo A* para escolher a equipe e o líder e para conferir se a bateria
+  de cada robô basta para a tarefa inteira (6.4).
 
 ---
 
@@ -580,8 +644,8 @@ Organizador).
 1. Colisão fora das passagens **não** é tratada: robôs podem ocupar a mesma célula.
 2. O mapa é sorteado só no início da execução; paredes, passagens e
    obstáculos não mudam enquanto o sistema roda.
-3. Obstáculos são células isoladas (1x1), nunca no corredor y = 15 nem perto
-   das bocas. Mapa que não passa no BFS é sorteado de novo (até 100 vezes;
+3. Obstáculos são células isoladas (1x1), nunca na linha y = 15, nas áreas
+   das baias/zonas nem perto das bocas. Mapa que não passa no BFS é sorteado de novo (até 100 vezes;
    se nenhum servir, o programa termina).
 4. `novo` e `goto` aceitam qualquer célula livre fora das passagens, sem
    conferir se ela é alcançável (ex.: cercada de obstáculos). Sem caminho, o
@@ -639,6 +703,19 @@ Organizador).
     chega depois do clique; se duas respostas de comandos chegarem no mesmo
     ciclo de 200 ms da tela, a do `historico` pode ser perdida (basta clicar de novo).
 
+**Bateria**
+25. O custo de bateria é uma ESTIMATIVA: passos do A* / 5 + margem de
+    10 pontos. Os seguidores andam 1–2 células a mais que o líder e um robô
+    pode replanejar por um caminho mais longo; a margem cobre isso. O
+    trecho "zona → estação" é calculado da zona, sem contar outra tarefa
+    depois; o robô é reavaliado a cada nova caixa.
+26. O `RECARREGAR` só é mandado quando a caixa da vez está sem equipe;
+    um robô com bateria baixa que não faz falta fica parado até ser preciso
+    (ou até cair abaixo do limite da Status).
+27. Na tela (painel Eventos), os registros de carga "id;baia;zona;robôs"
+    viram "Caixa 4: baia 2 → zona D (robôs 0)" só na exibição
+    (`cores.texto_evento`); o `logs/cargas.csv` continua no formato cru.
+
 ---
 
 ## 9. Cenários de teste
@@ -657,7 +734,8 @@ Como o mapa é sorteado, o script fixa a semente: **42** nos cenários 1–4 (a
 mesma do vídeo), **1 e 2** no cenário 5 (que roda duas vezes:
 `cenario5_semente1` e `cenario5_semente2`) e **5** no cenário 6 (na semente
 42 a passagem de capacidade 1 fica sozinha numa parede, sem outra para o
-replanejamento escolher; na 5 ela divide a parede 1 com a P1).
+replanejamento escolher; na 5 ela divide a parede 1 com a P1) e **42** no
+cenário 7.
 
 | Cenário | O que testa |
 |---|---|
@@ -667,6 +745,7 @@ replanejamento escolher; na 5 ela divide a parede 1 com a P1).
 | 4 | Caixa de tamanho 4 com 3 robôs: espera sem reservar ninguém, a fila para, o sistema continua respondendo; atendida quando o 4º robô é criado. Depois a fila anda: um 5º robô leva a caixa 2. |
 | 5 | Mesmo arquivo com sementes 1 e 2: o comando `mapa` mostra passagens (posição e capacidade) e obstáculos diferentes, e nos dois mapas o robô entrega a caixa da baia 2 na zona D. |
 | 6 | Passagem de capacidade 1 (P2) disputada: o robô 0 fica sem bateria dentro dela (segura a vaga); o robô 1 espera na porta e, depois de 3 s, "replanejou rota: passagem P2 cheia" e atravessa pela P1. |
+| 7 | Bateria suficiente para a tarefa inteira: robôs longe da baia com 31%, 35% e 38% não são escolhidos para a caixa (tam 3, baia 1 → zona A), recebem `RECARREGAR` e só depois de recarregar formam a equipe; com 5 robôs e 12 caixas por ~3 min nenhum robô chega a 0% (o script avisa se houver DEFEITO). Com o código antigo o robô 2 chegava a 0% a caminho da baia. |
 
 Os cenários usam `aguarda <id> <ESTADO> [timeout_s]` (espera o robô chegar a
 um estado, lendo o buffer de status a cada 100 ms) em vez de `espera` sempre

@@ -6,8 +6,10 @@ devolve texto SVG; não usa a interface — ver testes/test_mapa_svg.py), com
 os desenhos ("carimbos") de desenhos.py:
   svg_fundo(mapa, fonte)               gerado uma vez por mapa: piso, paredes
                                        internas, obstáculos, passagens (com o
-                                       rótulo "P1 (cap 3)"), corredor, baias,
-                                       zonas, estações, decoração, régua.
+                                       rótulo "P1 (cap 3)"), baias, zonas,
+                                       estações, decoração, régua. (Não há
+                                       faixa de corredor nem de acesso: o
+                                       caminho real é o A*, pelas passagens.)
   svg_vivo(mapa, status, selecionado, direcoes, agora)
                                        a cada atualização: semáforos e
                                        cancelas das passagens, luzes das
@@ -62,8 +64,10 @@ def _abre_svg(mapa):
 
 def regiao(ponto, mapa, lado):
     """Área (em células) de uma baia (lado="esq") ou zona (lado="dir"):
-    3 células para cada lado do ponto na vertical, sem invadir o corredor,
-    e da parede até 3 células depois do ponto na horizontal."""
+    3 células para cada lado do ponto na vertical, sem invadir a linha
+    y = corredor_y (assim as áreas das baias 2 e 3 não se encostam), e da
+    parede até 3 células depois do ponto na horizontal. O C não sorteia
+    obstáculo dentro dela (area_de_baia_ou_zona em src/mapa.c)."""
     y0, y1 = max(0, ponto["y"] - 3), min(mapa["altura"] - 1, ponto["y"] + 3)
     cy = mapa["corredor_y"]
     if y0 <= cy <= y1:
@@ -96,7 +100,6 @@ def svg_fundo(mapa, fonte_base64=None):
     p += _moldura_e_piso(mapa)
     p += _baias(mapa)
     p += _zonas(mapa)
-    p += _corredor_e_acessos(mapa)
     p += _paredes_internas(mapa)
     p += _passagens(mapa)
     p += _obstaculos(mapa)
@@ -237,55 +240,6 @@ def _passagens(mapa):
         p.append(d.texto(x + w / 2, y + h / 2 + 0.5, f"{pas['nome']} (cap {pas['capacidade']})", 12,
                          peso=700, contorno="white"))
     return p
-
-
-def _faixas_do_corredor(mapa):
-    """Trechos [x1, x2] da linha do corredor que não estão dentro de uma
-    parede (o corredor é interrompido por elas)."""
-    cy = mapa["corredor_y"]
-    bloqueadas = {x for r in mapa["paredes"] if r["y1"] <= cy <= r["y2"]
-                  for x in range(r["x1"], r["x2"] + 1)}
-    trechos, inicio = [], None
-    for x in range(mapa["largura"] + 1):
-        livre = x < mapa["largura"] and x not in bloqueadas
-        if livre and inicio is None:
-            inicio = x
-        elif not livre and inicio is not None:
-            trechos.append((inicio, x - 1))
-            inicio = None
-    return trechos
-
-
-def _corredor_e_acessos(mapa):
-    """Faixa amarela do corredor (com setas brancas e marcas de pneu), só
-    entre as paredes, e faixas de acesso mais finas ligando baias e zonas
-    ao corredor."""
-    p = []
-    cy = mapa["corredor_y"]
-    for ponto in mapa["baias"] + mapa["zonas"]:
-        a, b = sorted((ponto["y"], cy))
-        x = px(ponto["x"]) + CELULA * 0.2
-        p.append(f'<rect x="{x}" y="{px(a)}" width="{CELULA * 0.6}" height="{(b - a) * CELULA}" '
-                 f'fill="{cores.FAIXA}" opacity="0.85"/>')
-    for x1, x2 in _faixas_do_corredor(mapa):
-        x, y, w, h = ret(x1, cy, x2, cy)
-        p.append(f'<rect x="{x}" y="{y - 3}" width="{w}" height="{h + 6}" fill="{cores.FAIXA}" '
-                 f'stroke="{cores.FAIXA_BORDA}" stroke-width="2"/>')
-        # marcas de pneu bem suaves
-        for dy in (-5, 5):
-            p.append(f'<path d="M{x} {y + h / 2 + dy} Q{x + w / 4} {y + h / 2 + dy - 2} {x + w / 2} '
-                     f'{y + h / 2 + dy} T{x + w} {y + h / 2 + dy}" fill="none" '
-                     f'stroke="{cores.CONTORNO}" stroke-width="2" opacity="0.07"/>')
-        # setas brancas, alternando o sentido (mão dupla)
-        for k, cx in enumerate(range(x1 + 3, x2 - 1, 6)):
-            p.append(_seta(px(cx), y + h / 2, 1 if k % 2 == 0 else -1))
-    return p
-
-
-def _seta(x, y, sentido):
-    s = sentido
-    return (f'<path d="M{x - 7 * s} {y - 3} H{x + 1 * s} V{y - 6.5} L{x + 8 * s} {y} '
-            f'L{x + 1 * s} {y + 6.5} V{y + 3} H{x - 7 * s} Z" fill="white" opacity="0.9"/>')
 
 
 def _estacoes(mapa):

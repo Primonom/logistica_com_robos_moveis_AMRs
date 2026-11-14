@@ -1,0 +1,48 @@
+# Cenário 7: bateria suficiente para a TAREFA INTEIRA (semente 42).
+# 5 robôs: 0 e 1 perto das baias (100%); 2, 3 e 4 longe, do outro lado das
+# 3 paredes (perto das zonas), com bateria entre 30% e 40%.
+# Antes (regra "bateria >= 30%") o robô 2, 3 ou 4 mais perto da baia era
+# escolhido para a caixa de tamanho 3 (baia 1 -> zona A) e chegava a 0% no
+# caminho (DEFEITO para sempre): a tarefa custa uns 40% para ele.
+# Esperado agora:
+#  - custo da tarefa = (robô->baia + baia->zona + zona->estação) / 5 + 10:
+#    2, 3 e 4 NÃO são escolhidos; o Organizador manda RECARREGAR para eles
+#    ("robo N sem bateria para a caixa 1: RECARREGAR");
+#  - eles vão para a estação, voltam a DISPONIVEL com 100% e só então a
+#    equipe da caixa 1 é formada;
+#  - depois, 11 caixas a mais (12 no total) por ~3 minutos: NENHUM robô
+#    entra em DEFEITO (0%); quem fica sem bateria para a próxima tarefa
+#    recarrega antes. O rodar_todos.sh confere os eventos.
+novo 5 15
+novo 6 15
+novo 50 15
+novo 52 15
+novo 54 15
+aguarda 4 DISPONIVEL
+bateria 2 31
+bateria 3 35
+bateria 4 38
+espera 1
+status
+caixa 3 1 A
+aguarda 2 RECARREGANDO 10
+aguarda 3 RECARREGANDO 10
+aguarda 4 RECARREGANDO 10
+status
+aguarda 2 DISPONIVEL 30
+aguarda 3 DISPONIVEL 30
+aguarda 4 DISPONIVEL 30
+caixa 1 1 C
+caixa 3 4 B
+caixa 1 2 D
+caixa 4 1 A
+caixa 2 2 B
+caixa 1 3 D
+caixa 3 2 C
+caixa 1 4 A
+caixa 2 1 D
+caixa 1 3 B
+caixa 2 4 C
+espera 170
+status
+sair

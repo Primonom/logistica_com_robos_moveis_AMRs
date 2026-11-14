@@ -106,7 +106,8 @@ bool dentro_de_passagem(int x, int y);
 bool celula_livre(int x, int y);          /* dentro do mapa e sem parede/obstáculo */
 bool posicao_valida(int x, int y);        /* livre e fora das passagens */
 bool na_estacao(int x, int y);            /* (x, y) é uma estação de recarga? */
-void estacao_mais_proxima(int x, int y, int *ex, int *ey);
+int  estacao_mais_proxima(int x, int y, int *ex, int *ey); /* retorna os passos (-1 = sem caminho) */
+int  passos_caminho(int x0, int y0, int xd, int yd);      /* passos do A* (-1 = sem caminho) */
 void desenhar_mapa(char *saida, int tam); /* texto do mapa (comando "mapa") */
 
 #endif

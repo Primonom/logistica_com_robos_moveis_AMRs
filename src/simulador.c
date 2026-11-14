@@ -34,7 +34,8 @@
 #include "comum.h"
 #include "mapa.h"
 
-#define CELULAS_POR_PORCENTO 5  /* bateria cai 1% a cada 5 células andadas */
+/* CELULAS_POR_PORCENTO fica em comum.h: o Organizador e a Status usam o
+ * mesmo valor para estimar o gasto de um caminho. */
 #define RECARGA_POR_CICLO    2  /* na estação, sobe 2% por ciclo (100 ms) */
 
 static int celulas_andadas[MAX_ROBOS]; /* só esta thread usa */

@@ -1,21 +1,21 @@
-2026-11-14 16:59:13.708;-1;sistema iniciado
-2026-11-14 16:59:13.708;-1;mapa gerado com semente 1
-2026-11-14 16:59:13.727;0;robo criado (pid 8131) em (8,15)
-2026-11-14 16:59:13.736;0;robo vivo
-2026-11-14 16:59:14.218;-1;1 robo(s) novo(s) na frota
-2026-11-14 16:59:14.220;-1;caixa 1 (tam 1, baia 2 -> zona D): robos 0 indo para a baia
-2026-11-14 16:59:14.237;0;tarefa: ir para a baia (caixa 1)
-2026-11-14 16:59:15.137;0;chegou ao destino
-2026-11-14 16:59:15.718;-1;caixa 1: equipe completa na baia, ACOPLAR
-2026-11-14 16:59:15.837;0;carga erguida
-2026-11-14 16:59:16.217;-1;caixa 1: erguida por todos, IR_ZONA D (lider 0)
-2026-11-14 16:59:17.837;0;entrou na passagem P1
-2026-11-14 16:59:18.537;0;saiu da passagem P1
-2026-11-14 16:59:19.337;0;entrou na passagem P2
-2026-11-14 16:59:20.037;0;saiu da passagem P2
-2026-11-14 16:59:22.337;0;entrou na passagem P4
-2026-11-14 16:59:23.037;0;saiu da passagem P4
-2026-11-14 16:59:24.537;0;chegou ao destino
-2026-11-14 16:59:24.719;-1;caixa 1 entregue na zona D (robos 0)
-2026-11-14 16:59:24.737;0;carga solta
-2026-11-14 16:59:25.216;-1;sistema encerrado
+2026-11-14 17:32:01.423;-1;sistema iniciado
+2026-11-14 17:32:01.423;-1;mapa gerado com semente 1
+2026-11-14 17:32:01.444;0;robo criado (pid 9789) em (8,15)
+2026-11-14 17:32:01.450;0;robo vivo
+2026-11-14 17:32:01.931;-1;1 robo(s) novo(s) na frota
+2026-11-14 17:32:01.934;-1;caixa 1 (tam 1, baia 2 -> zona D): robos 0 indo para a baia
+2026-11-14 17:32:01.950;0;tarefa: ir para a baia (caixa 1)
+2026-11-14 17:32:02.850;0;chegou ao destino
+2026-11-14 17:32:02.931;-1;caixa 1: equipe completa na baia, ACOPLAR
+2026-11-14 17:32:03.050;0;carga erguida
+2026-11-14 17:32:03.429;-1;caixa 1: erguida por todos, IR_ZONA D (lider 0)
+2026-11-14 17:32:05.050;0;entrou na passagem P1
+2026-11-14 17:32:05.750;0;saiu da passagem P1
+2026-11-14 17:32:06.550;0;entrou na passagem P2
+2026-11-14 17:32:07.250;0;saiu da passagem P2
+2026-11-14 17:32:09.550;0;entrou na passagem P4
+2026-11-14 17:32:10.250;0;saiu da passagem P4
+2026-11-14 17:32:11.750;0;chegou ao destino
+2026-11-14 17:32:11.932;-1;caixa 1 entregue na zona D (robos 0)
+2026-11-14 17:32:11.950;0;carga solta
+2026-11-14 17:32:12.428;-1;sistema encerrado

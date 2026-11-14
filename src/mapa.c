@@ -6,8 +6,10 @@
  *   - processo central: gerar_mapa (main, uma vez, antes das threads),
  *     calcular_caminho (Organizador escolhe robôs), posicao_valida
  *     (Console e ponte MQTT), na_estacao (simulador);
- *   - processo robo: calcular_caminho (Navegação), estacao_mais_proxima e
- *     na_estacao (Status).
+ *   - processo central: também passos_caminho e estacao_mais_proxima
+ *     (Organizador estima a bateria da tarefa);
+ *   - processo robo: calcular_caminho (Navegação), estacao_mais_proxima
+ *     (Status e Navegação) e na_estacao (Status).
  *
  * 1) GERAÇÃO DO MAPA (gerar_mapa), a cada execução, com a semente da
  *    variável de ambiente ATR_SEMENTE (ou time(NULL) se ela não existir):
@@ -17,7 +19,8 @@
  *      y sorteado em 2..27, com 5 ou mais de distância entre duas
  *      passagens da mesma parede;
  *    - 45 obstáculos de 1 célula em lugares livres, longe das bocas das
- *      passagens e fora do corredor y = 15;
+ *      passagens, fora do corredor y = 15 e fora das ÁREAS das baias e
+ *      zonas (os retângulos coloridos da tela, não só a célula do ponto);
  *    - validação com BFS (busca em largura): de cada baia tem de dar para
  *      chegar a todas as zonas, estações e à posição padrão. Se não der,
  *      sorteia de novo (até 100 tentativas).
@@ -104,23 +107,35 @@ bool na_estacao(int x, int y)
     return false;
 }
 
-/* Estação com o MENOR CAMINHO (A*) a partir de (x, y). Se nenhuma tem
- * caminho (não acontece num mapa validado), fica a primeira. */
-void estacao_mais_proxima(int x, int y, int *ex, int *ey)
+/* Número de passos (células andadas) do caminho A* de (x0, y0) até
+ * (xd, yd), ou -1 se não há caminho. Usado para estimar a bateria. */
+int passos_caminho(int x0, int y0, int xd, int yd)
 {
     Caminho c;
-    int i, melhor = -1;
+
+    if (!calcular_caminho(x0, y0, xd, yd, &c))
+        return -1;
+    return c.n - 1;
+}
+
+/* Estação com o MENOR CAMINHO (A*) a partir de (x, y). Retorna os passos
+ * até ela, ou -1 se nenhuma tem caminho (não acontece num mapa validado;
+ * nesse caso fica a primeira). */
+int estacao_mais_proxima(int x, int y, int *ex, int *ey)
+{
+    int i, p, melhor = -1;
 
     *ex = ESTACAO_X[0];
     *ey = ESTACAO_Y[0];
     for (i = 0; i < N_ESTACOES; i++) {
-        if (calcular_caminho(x, y, ESTACAO_X[i], ESTACAO_Y[i], &c) &&
-            (melhor == -1 || c.n < melhor)) {
-            melhor = c.n;
+        p = passos_caminho(x, y, ESTACAO_X[i], ESTACAO_Y[i]);
+        if (p >= 0 && (melhor == -1 || p < melhor)) {
+            melhor = p;
             *ex = ESTACAO_X[i];
             *ey = ESTACAO_Y[i];
         }
     }
+    return melhor;
 }
 
 /* ============================================================
@@ -305,6 +320,23 @@ static bool ponto_fixo(int x, int y)
     return x == POS_PADRAO_X && y == POS_PADRAO_Y;
 }
 
+/* Dentro da ÁREA de uma baia ou zona (o retângulo colorido que a tela
+ * desenha, ver regiao() em interface/mapa_svg.py)? Baia: da parede
+ * esquerda até 3 células à direita do ponto; zona: de 3 células à
+ * esquerda do ponto até a parede direita; nas duas, 3 células acima e
+ * abaixo do ponto. Obstáculo ali deixaria a área "suja" e atrapalharia a
+ * fila de robôs chegando. */
+static bool area_de_baia_ou_zona(int x, int y)
+{
+    int i;
+
+    for (i = 0; i < N_BAIAS; i++)
+        if (x <= BAIA_X[i] + 3 && abs(y - BAIA_Y[i]) <= 3) return true;
+    for (i = 0; i < N_ZONAS; i++)
+        if (x >= ZONA_X[i] - 3 && abs(y - ZONA_Y[i]) <= 3) return true;
+    return false;
+}
+
 /* A até RAIO_BOCA células (quadrado 5x5) da boca de alguma passagem? */
 static bool perto_de_boca(const Mapa *m, int x, int y)
 {
@@ -324,7 +356,8 @@ static bool perto_de_boca(const Mapa *m, int x, int y)
 static bool aceita_obstaculo(const Mapa *m, int x, int y)
 {
     return m->tipo[y][x] == LIVRE && m->passagem[y][x] == -1 &&
-           y != CORREDOR_Y && !ponto_fixo(x, y) && !perto_de_boca(m, x, y);
+           y != CORREDOR_Y && !ponto_fixo(x, y) && !area_de_baia_ou_zona(x, y) &&
+           !perto_de_boca(m, x, y);
 }
 
 /* Sorteia o y de uma passagem na parede "parede", a 5 ou mais de

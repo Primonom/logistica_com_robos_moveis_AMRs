@@ -4,7 +4,8 @@
  * Thread: tarefa_navegacao, periódica com período PERIODO_NAVEGACAO_MS
  * (T1 = 100 ms). A cada ciclo:
  *   1) lê as mensagens da fila /atr_robo_<id> sem bloquear e trata cada uma
- *      (GOTO, MODO_MANUAL/AUTO, TAREFA_IR_BAIA, ACOPLAR, IR_ZONA, SOLTAR);
+ *      (GOTO, MODO_MANUAL/AUTO, TAREFA_IR_BAIA, ACOPLAR, IR_ZONA, SOLTAR,
+ *      PAUSAR/CONTINUAR, RECARREGAR);
  *   2) se mandou erguer a carga, verifica se o hardware confirmou;
  *   3) se está PARADO (flag "parar" da Status = DEFEITO, ou PAUSAR do
  *      Organizador porque alguém da equipe está em DEFEITO): só mantém o
@@ -26,6 +27,10 @@
  *   SOLTAR                         DISPONIVEL
  *   ir_recarregar (da Status)      RECARREGANDO (a Status volta a
  *                                  DISPONIVEL quando chega a 100%)
+ *   RECARREGAR (do Organizador,    RECARREGANDO, igual ao de cima
+ *     só se DISPONIVEL)
+ *   TAREFA_IR_BAIA também CANCELA um ir_recarregar ainda não atendido
+ *   (ver "Bateria suficiente para a tarefa" em docs/EXPLICACAO.md).
  *   Enquanto o robô está em DEFEITO, uma mudança de estado pedida aqui é
  *   guardada em estado_antes (vale quando o defeito sair).
  *
@@ -245,6 +250,20 @@ static void guardar_membros(const MensagemRobo *m)
             membros[n_membros++] = m->membros[k];
 }
 
+/* RECARREGAR do Organizador: a bateria não basta para a caixa da vez.
+ * Vai para a estação de menor caminho (a Status volta a DISPONIVEL quando
+ * chegar a 100%, igual à recarga que ela mesma pede). */
+static void ir_recarregar_agora(void)
+{
+    int x, y, ex, ey;
+
+    ler_posicao(&x, &y);
+    estacao_mais_proxima(x, y, &ex, &ey);
+    novo_destino(ex, ey, RECARREGANDO, RECARREGANDO);
+    registrar_evento(fila_coletor, id_robo,
+                     "bateria insuficiente para a tarefa: indo recarregar");
+}
+
 /* Trata uma mensagem recebida. */
 static void tratar_mensagem(const MensagemRobo *m)
 {
@@ -276,8 +295,18 @@ static void tratar_mensagem(const MensagemRobo *m)
         }
         break;
     case TAREFA_IR_BAIA:
+        /* O Organizador já conferiu que a bateria basta para a tarefa
+         * inteira; se a Status pediu recarga no mesmo instante (corrida
+         * rara, ver EXPLICACAO.md), a tarefa vence: o pedido é apagado. */
+        pthread_mutex_lock(&estado_local.mutex);
+        estado_local.ir_recarregar = false;
+        pthread_mutex_unlock(&estado_local.mutex);
         evento("tarefa: ir para a baia (caixa %d)", m->carga_id);
         novo_destino(m->x, m->y, DESLOCANDO, AGUARDANDO_EQUIPE);
+        break;
+    case RECARREGAR:
+        if (e == DISPONIVEL)
+            ir_recarregar_agora();
         break;
     case ACOPLAR:
         comandar_garra(true);
