@@ -3,24 +3,28 @@ simulacao.py — Ações de "hardware" (itens 8a–8d do enunciado: a Tela de
 Operação também faz o papel da tela do simulador).
 
   - Novo robô: por x/y, na posição padrão, ou clicando no mapa (liga o
-    "modo de clique" da página: o próximo clique no chão envia "novo x y").
+    "modo de clique" da página: o próximo clique no chão cria o robô).
+    Publica em atr/robo/novo ("x y" ou vazio): é o simulador avisando o
+    Gestor de Robôs que um robô novo chegou, como pede o enunciado.
   - Gerar defeito / tirar defeito e baixar a bateria de qualquer robô
     (escolhido na lista), sem precisar abrir o detalhe.
   - Incluir caixa: o formulário fica no painel Caixas.
   - "Cenário de demonstração": roteiro em 5 atos para o vídeo (ver
     demonstracao.py).
 
-Tudo vira uma linha de comando igual à do Console ("novo 10 5", "falha 2",
-"bateria 3 15"); quem valida e decide é o C.
+O resto vira uma linha de comando igual à do Console ("falha 2",
+"bateria 3 15") em atr/comando; quem valida e decide é o C.
 """
 from nicegui import ui
 
 
 class PainelSimulacao:
-    def __init__(self, enviar, modo_clique, iniciar_demonstracao):
-        """modo_clique: dicionário da página {"novo_robo": bool}, lido pelo
-        clique do mapa. iniciar_demonstracao: começa o cenário do vídeo."""
+    def __init__(self, enviar, enviar_novo_robo, modo_clique, iniciar_demonstracao):
+        """enviar_novo_robo(x, y): publica em atr/robo/novo. modo_clique:
+        dicionário da página {"novo_robo": bool}, lido pelo clique do mapa.
+        iniciar_demonstracao: começa o cenário do vídeo."""
         self.enviar = enviar
+        self.enviar_novo_robo = enviar_novo_robo
         self.modo_clique = modo_clique
         self.ids = None
         with ui.card().classes("painel w-full h-full"):
@@ -58,9 +62,9 @@ class PainelSimulacao:
 
     def _novo(self):
         if self.x.value is not None and self.y.value is not None:
-            self.enviar(f"novo {int(self.x.value)} {int(self.y.value)}")
+            self.enviar_novo_robo(int(self.x.value), int(self.y.value))
         else:
-            self.enviar("novo")
+            self.enviar_novo_robo()
 
     def _alternar_mapa(self):
         self.modo_clique["novo_robo"] = not self.modo_clique["novo_robo"]

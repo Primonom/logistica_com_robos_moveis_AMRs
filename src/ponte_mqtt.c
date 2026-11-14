@@ -21,8 +21,12 @@
  *   atr/comando (assina) uma linha de comando igual à do Console; é
  *               executada por executar_comando() (console.c) na thread de
  *               rede da biblioteca, e o resultado vai para
+ *   atr/robo/novo (assina) pedido de novo robô vindo do simulador (painel
+ *               "Simulação" da tela). Payload "x y" ou vazio (posição
+ *               padrão). Validado com posicao_valida e entregue ao Gestor
+ *               por pedir_novo_robo() (mesma fila do comando "novo").
  *   atr/comando/resposta (publica) "ok", a saída do comando, ou
- *               "erro: <mensagem>".
+ *               "erro: <mensagem>" (para atr/comando e atr/robo/novo).
  *   atr/eventos (publicado pelo Coletor, via ponte_publicar()).
  *
  * Ciclo de vida do cliente MQTT (um só, compartilhado):
@@ -55,6 +59,10 @@
  *     pela thread da ponte e lido pelo main depois do pthread_join dela.
  *   - Comandos recebidos: executar_comando() é segura para ser chamada ao
  *     mesmo tempo pelo Console e por aqui (ver console.c).
+ *   - Novo robô (atr/robo/novo): pedir_novo_robo() usa a fila de pedidos do
+ *     Gestor (mutex_pedidos + cond_pedidos, gestor.c); esta thread é só mais
+ *     um produtor, como o Console. Se a fila está cheia, recusa sem bloquear
+ *     a thread de rede.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -307,12 +315,39 @@ static void ao_conectar(struct mosquitto *mosq, void *dados, int codigo)
     /* A cada (re)conexão: assina de novo (o broker esquece as assinaturas
      * de um cliente "clean session") e republica o mapa. */
     mosquitto_subscribe(mosq, NULL, "atr/comando", 0);
+    mosquitto_subscribe(mosq, NULL, "atr/robo/novo", 0);
     publicar_mapa(mosq);
 }
 
-/* Callback (thread de rede da biblioteca): chegou uma mensagem. A única
- * assinatura é atr/comando: executa a linha como se fosse o Console e
- * publica a resposta. */
+/* atr/robo/novo: "x y" ou vazio (posição padrão). Escreve em "texto" a
+ * resposta ("ok" ou "erro: ..."). */
+static void novo_robo(const char *payload, char *texto, int tam)
+{
+    char resto;
+    int x = -1, y = -1, n;
+
+    n = sscanf(payload, "%d %d %c", &x, &y, &resto);
+    if (n == EOF) {
+        x = -1;  /* vazio: o Gestor usa a posição padrão */
+        y = -1;
+    } else if (n != 2) {
+        snprintf(texto, tam, "erro: uso do atr/robo/novo: \"x y\" ou vazio");
+        return;
+    } else if (!posicao_valida(x, y)) {
+        snprintf(texto, tam, "erro: (%d,%d) fora do mapa ou dentro de passagem", x, y);
+        return;
+    }
+    if (!pedir_novo_robo(x, y)) {
+        snprintf(texto, tam, "erro: fila de pedidos cheia, tente de novo");
+        return;
+    }
+    snprintf(texto, tam, "ok");
+}
+
+/* Callback (thread de rede da biblioteca): chegou uma mensagem.
+ *   atr/comando:   executa a linha como se fosse o Console;
+ *   atr/robo/novo: pede um novo robô ao Gestor.
+ * Nos dois casos publica a resposta em atr/comando/resposta. */
 static void ao_receber(struct mosquitto *mosq, void *dados,
                        const struct mosquitto_message *msg)
 {
@@ -323,15 +358,20 @@ static void ao_receber(struct mosquitto *mosq, void *dados,
     bool ok;
 
     (void)dados;
-    if (strcmp(msg->topic, "atr/comando") != 0)
-        return;
-    /* O payload não termina em '\0': copia com limite e termina. */
+    /* O payload não termina em '\0': copia com limite e termina. Payload
+     * vazio (atr/robo/novo sem posição) pode vir com ponteiro NULL. */
     n = msg->payloadlen < (int)sizeof(linha) - 1 ? msg->payloadlen : (int)sizeof(linha) - 1;
-    memcpy(linha, msg->payload, n);
+    if (n > 0)
+        memcpy(linha, msg->payload, n);
     linha[n] = '\0';
 
     if (atomic_load(&mem->encerrar)) {
         snprintf(texto, sizeof(texto), "erro: sistema encerrando");
+    } else if (strcmp(msg->topic, "atr/robo/novo") == 0) {
+        novo_robo(linha, texto, sizeof(texto));
+        printf("Ponte MQTT: novo robo \"%s\" -> %s\n", linha, texto);
+    } else if (strcmp(msg->topic, "atr/comando") != 0) {
+        return;  /* tópico não assinado: ignora */
     } else {
         ok = executar_comando(linha, resp, sizeof(resp));
         snprintf(texto, sizeof(texto), "%s%s", ok ? "" : "erro: ", resp);

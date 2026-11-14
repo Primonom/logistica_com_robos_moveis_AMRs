@@ -1,6 +1,35 @@
 # logistica_com_robos_moveis_AMRs
 Um sistema central de logística com robôs móveis (AMRs) num galpão 2D visto de cima. Cada carga vai de uma baia até uma zona de entrega, e cargas maiores exigem de 1 a 4 robôs juntos. Os robôs só acoplam e erguem a carga de forma síncrona, quando todos os necessários chegaram na baia.
 
+## Arquitetura
+
+- **Núcleo em C** (`./logistica` + um processo `./robo` por robô): Gestor de
+  Robôs, Organizador, Coletor de Dados, **Simulador do hardware**
+  (`src/simulador.c`: move o robô até o setpoint, simula bateria, recarga e
+  garra) e Ponte MQTT. Detalhes de cada mecanismo de sincronização em
+  `docs/EXPLICACAO.md`.
+- **Tela de Operação** em Python/NiceGUI (`interface/`), via MQTT. O painel
+  "Simulação" é também a tela do simulador (gerar defeito, baixar bateria,
+  incluir caixas, criar robôs).
+
+Tópicos MQTT:
+
+| Tópico | Quem publica | Conteúdo |
+|---|---|---|
+| `atr/mapa` | C (retained) | JSON do mapa |
+| `atr/status` | C, a cada 200 ms | robôs, caixas, passagens, contadores |
+| `atr/eventos` | Coletor | cada registro gravado em `logs/*.csv` |
+| `atr/comando` | Tela | linha igual à do Console (`falha 2`, `historico 50`...) |
+| `atr/robo/novo` | Tela (simulador) | novo robô: `"x y"` ou vazio (posição padrão) |
+| `atr/comando/resposta` | C | `ok`, a saída do comando, ou `erro: ...` |
+
+O comando `historico [n]` devolve as últimas n linhas (padrão 30, máx. 100)
+de `logs/eventos.csv` e `logs/cargas.csv`; na tela, botão "Carregar histórico
+do disco" no painel Eventos.
+
+Testes: `testes/rodar_todos.sh` (cenários pelo Console, sem precisar do
+broker) e `interface/.venv/bin/python -m pytest -q interface`.
+
 ## Docker
 
 Requisitos: Docker Desktop com integração WSL 2 habilitada e Docker Compose v2.

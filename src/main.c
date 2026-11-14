@@ -7,7 +7,7 @@
  *
  * Uso: ./logistica [arquivo_de_caixas]   (padrão: config/caixas.txt)
  *
- * Threads: principal, Coletor, Gestor, Organizador, Simulador-stub e
+ * Threads: principal, Coletor, Gestor, Organizador, Simulador e
  * Ponte MQTT (que por sua vez inicia a thread de rede da libmosquitto).
  *   A thread principal roda o Console (laço de comandos do stdin). Quando
  *   chega "sair" ou o fim da entrada, ela faz o encerramento limpo.

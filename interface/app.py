@@ -120,6 +120,7 @@ body {{ background: {cores.FUNDO}; color: {cores.TEXTO}; }}
 def pagina():
     ui.add_css(CSS)
     enviar = cliente_mqtt.enviar_comando
+    novo_robo = cliente_mqtt.enviar_novo_robo   # simulador -> atr/robo/novo
     selecao = {"id": None}    # robô selecionado NESTA aba do navegador
     modo_clique = {"novo_robo": False}   # clique no mapa posiciona um novo robô?
 
@@ -141,12 +142,12 @@ def pagina():
     with ui.column().classes("w-full p-4 gap-4"):
         cabecalho = Cabecalho()
         demonstracao = Demonstracao(estado, enviar)   # faixa do roteiro (só aparece no cenário)
-        mapa = PainelMapa(selecionar, enviar, modo_clique)
+        mapa = PainelMapa(selecionar, enviar, novo_robo, modo_clique)
         robos = PainelRobos(selecionar, enviar)
         with ui.element("div").classes("linha-inferior"):
             caixas = PainelCaixas(enviar)
-            eventos = PainelEventos()
-            simulacao = PainelSimulacao(enviar, modo_clique, demonstracao.iniciar)
+            eventos = PainelEventos(enviar)
+            simulacao = PainelSimulacao(enviar, novo_robo, modo_clique, demonstracao.iniciar)
         graficos = PainelGraficos()
     notificador = Notificador()
 

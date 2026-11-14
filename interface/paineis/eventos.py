@@ -4,6 +4,9 @@ eventos.py — Log de eventos ao vivo e notificações (toasts).
   PainelEventos  o atr/eventos ao vivo (mais recente em cima), com filtro por
                  robô e por tipo; cor e ícone pela categoria do evento
                  (cores.categoria_evento: só aparência, tirada do texto).
+                 O botão "Carregar histórico do disco" envia "historico 50"
+                 e mostra a resposta (últimas linhas de logs/eventos.csv e
+                 logs/cargas.csv, lidas pelo C) numa caixa de texto.
   Notificador    toasts para DEFEITO, bateria baixa e resposta de erro de
                  comando. Usa os números de sequência do estado.py para
                  avisar só do que é NOVO (ao abrir a página, nada antigo
@@ -16,11 +19,16 @@ from nicegui import ui
 import cores
 
 MAX_LINHAS = 150     # quantos eventos o log mostra (os mais recentes)
+LINHAS_HISTORICO = 50
+INICIO_HISTORICO = "# logs/eventos.csv"   # a resposta do "historico" começa assim
 
 
 class PainelEventos:
-    def __init__(self):
+    def __init__(self, enviar):
+        self.enviar = enviar
         self.mostrado = None          # (último seq, filtros) já desenhados
+        self.seq_visto = 0            # seq_resposta da última atualização
+        self.seq_pedido = None        # seq_resposta quando o histórico foi pedido
         with ui.card().classes("painel w-full h-full"):
             with ui.row().classes("w-full items-center justify-between no-wrap"):
                 ui.label("Eventos").classes("painel-titulo")
@@ -33,10 +41,32 @@ class PainelEventos:
                 self.f_tipo = ui.select(tipos, value="todos", label="tipo") \
                     .props("dense outlined dark options-dense").classes("grow")
             self.lista = ui.column().classes("w-full gap-0 lista-eventos")
+            ui.button("Carregar histórico do disco", icon="history",
+                      on_click=self._pedir_historico) \
+                .props("dense no-caps outline color=amber").classes("w-full")
+            self.historico = ui.textarea().props("readonly outlined dark dense rows=10") \
+                .classes("w-full").style("font-family: monospace; font-size: .75rem")
+            self.historico.set_visibility(False)
         self.ids_robos = None
+
+    def _pedir_historico(self):
+        self.seq_pedido = self.seq_visto
+        self.enviar(f"historico {LINHAS_HISTORICO}")
+
+    def _mostrar_historico(self, dados):
+        """Mostra a primeira resposta de "historico" que chegar depois do pedido
+        (outras respostas, de outros comandos, são ignoradas aqui)."""
+        self.seq_visto = dados["seq_resposta"]
+        resposta = dados["ultima_resposta"] or ""
+        if self.seq_pedido is not None and self.seq_visto > self.seq_pedido \
+                and resposta.startswith(INICIO_HISTORICO):
+            self.seq_pedido = None
+            self.historico.set_value(resposta)
+            self.historico.set_visibility(True)
 
     def atualizar(self, dados):
         eventos = dados["eventos"]
+        self._mostrar_historico(dados)
         self._opcoes_robos(dados["status"])
         ultimo = eventos[-1]["seq"] if eventos else 0
         chave = (ultimo, self.f_robo.value, self.f_tipo.value)

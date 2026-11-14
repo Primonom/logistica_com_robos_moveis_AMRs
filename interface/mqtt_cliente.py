@@ -2,7 +2,8 @@
 mqtt_cliente.py — Conexão da Tela de Operação com o broker MQTT.
 
 Assina:   atr/mapa, atr/status, atr/eventos, atr/comando/resposta
-Publica:  atr/comando  (linhas iguais às do Console do C: "manual 2", ...)
+Publica:  atr/comando    (linhas iguais às do Console do C: "manual 2", ...)
+          atr/robo/novo  (simulador: pedido de novo robô, "x y" ou vazio)
 
 Concorrência:
   - client.loop_start() cria a THREAD DE REDE do paho-mqtt. Os callbacks
@@ -46,6 +47,12 @@ class ClienteMqtt:
         """Publica uma linha de comando (igual à do Console do C).
         A resposta chega depois em atr/comando/resposta."""
         self.cliente.publish("atr/comando", linha)
+
+    def enviar_novo_robo(self, x=None, y=None):
+        """Simulador: "um novo robô apareceu". Publica em atr/robo/novo
+        "x y" (ou vazio = posição padrão do Gestor). Quem valida é o C; a
+        resposta chega em atr/comando/resposta."""
+        self.cliente.publish("atr/robo/novo", "" if x is None else f"{x} {y}")
 
     # ---------- Callbacks (thread de rede do paho) ----------
 

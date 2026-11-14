@@ -1,4 +1,4 @@
-# Explicação dos mecanismos de sincronização — Logística com AMRs (Etapa 1)
+# Explicação dos mecanismos de sincronização — Logística com AMRs
 
 Este documento explica, para o relatório e a entrevista, **cada mecanismo de
 sincronização** do sistema: onde ele está, que problema resolve e o que
@@ -15,13 +15,18 @@ Processo central "logistica"                 Processo "robo <id>" (um por robô)
 | thread Gestor de Robôs               |     |   espera as duas abaixo      |
 | thread Organizador da Logística (T3) |     | thread Navegação  (T1=100ms) |
 | thread Coletor de Dados              |     | thread Status     (T2=200ms) |
-| thread Simulador-stub (100 ms)       |     +------------------------------+
+| thread Simulador do hardware (100 ms)|     +------------------------------+
+| thread Ponte MQTT (200 ms) + thread  |
+|   de rede da libmosquitto            |
 +--------------------------------------+
         |           |            |                    |        |        |
         |   fila /atr_robo_<id>  +----------------->  |        |        |
         |   fila /atr_coletor  <--------------------- (todos enviam eventos)
         |   semáforos /atr_passagem_1..3 <-------------------- (Navegação)
         +---- memória compartilhada /atr_shm  <---- todos os processos ---+
+        |
+   MQTT (broker mosquitto) <----> Tela de Operação em Python (NiceGUI),
+                                  que também é a tela do simulador
 ```
 
 | Recurso | Tipo | Criado em | Usado por |
@@ -33,7 +38,7 @@ Processo central "logistica"                 Processo "robo <id>" (um por robô)
 | `/atr_coletor` | fila de mensagens POSIX | `main.c: criar_fila_coletor` | todos → Coletor |
 | `/atr_robo_<id>` | fila de mensagens POSIX | `gestor.c: criar_fila_robo` | Organizador/Console → Navegação |
 | `/atr_passagem_1..3` | semáforos nomeados contadores | `main.c: criar_semaforos` | Navegação |
-| fila de pedidos | fila circular + mutex + variável de condição | `gestor.c` | Console → Gestor |
+| fila de pedidos | fila circular + mutex + variável de condição | `gestor.c` | Console / Ponte MQTT → Gestor |
 | `robos_novos` | contador + mutex | `gestor.c` | Gestor → Organizador |
 | `estado_local` | struct + mutex comum | `robo_main.c` | Navegação ↔ Status |
 
@@ -127,6 +132,27 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
   que o Coletor grava).
 - **Fim:** `pedir_fim_coletor` envia `COLETOR_FIM`; como a fila é FIFO, tudo
   o que foi enviado antes ainda é gravado.
+- **Disponível para a operação remota:** depois de gravar, o Coletor publica
+  o registro em `atr/eventos` (ao vivo). O que já está em disco é lido pelo
+  comando `historico [n]` (ver 2.6.1).
+
+#### 2.6.1 Leitura do histórico (`historico [n]`, sem mutex)
+- **Onde:** `console.c: comando_historico` / `anexar_ultimas_linhas`.
+  Chamado pelo Console ou pela Tela (botão "Carregar histórico do disco" no
+  painel Eventos → `atr/comando` → ponte MQTT).
+- **Problema:** o enunciado pede que os registros sejam armazenados em disco
+  **e** disponibilizados para a operação remota. A tela só recebe ao vivo o
+  que acontece enquanto ela está aberta.
+- **Como:** abre `logs/eventos.csv` e `logs/cargas.csv` em modo `"r"` (um
+  `FILE` próprio), guarda as linhas num vetor circular local
+  (`ultimas[k % n]`) e devolve as últimas n (padrão 30, máximo 100) como texto.
+- **Por que não precisa de mutex:** o Coletor é o único escritor, só
+  **acrescenta** linhas no fim e dá `fflush` depois de cada uma; nada já
+  escrito muda. No pior caso a leitura pega a última linha pela metade (sem
+  `\n`), e ela é descartada. Os vetores são locais (variáveis de pilha),
+  então Console e ponte podem chamar ao mesmo tempo.
+- **Sem esse cuidado:** mostrar uma linha cortada; com vetores `static`,
+  duas chamadas simultâneas misturariam as respostas.
 
 ### 2.7 Filas de mensagens `/atr_robo_<id>`
 - **Onde:** criadas pelo Gestor; enviadas por `gestor.c: enviar_para_robo`
@@ -175,17 +201,20 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
 
 ### 3.1 Fila circular + mutex + variável de condição (pedidos de novo robô)
 - **Onde:** `gestor.c` (`pedidos[]`, `mutex_pedidos`, `cond_pedidos`).
-  Produtor: `pedir_novo_robo` (Console). Consumidor: `tarefa_gestor`.
-- **Problema:** produtor-consumidor clássico entre duas threads.
-- **Mutex:** sem ele, Console e Gestor alterariam `inicio`/`quantidade` ao
-  mesmo tempo (pedido perdido ou lido duas vezes).
+  Produtores: `pedir_novo_robo`, chamado pelo Console (comando `novo`, nos
+  cenários de teste) e pela ponte MQTT (tópico `atr/robo/novo`, publicado
+  pelo simulador). Consumidor: `tarefa_gestor`.
+- **Problema:** produtor-consumidor clássico (dois produtores, um consumidor).
+- **Mutex:** sem ele, Console, ponte e Gestor alterariam `inicio`/`quantidade`
+  ao mesmo tempo (pedido perdido ou lido duas vezes).
 - **Variável de condição:** o Gestor **dorme** com a fila vazia, sem gastar
   CPU. Sem ela, o Gestor teria de ficar testando a fila em laço (espera ocupada).
 - **`while` e não `if`:** ao acordar, a condição é testada de novo (o sinal
   pode ser de encerramento ou um despertar espúrio).
 - **Encerramento sem aviso perdido:** `acordar_gestor` faz o `broadcast` com o
   mutex travado; assim ele não cai entre o "testa a condição" e o "dorme" do Gestor.
-- **Fila cheia:** o pedido é recusado (Console avisa), em vez de travar o Console.
+- **Fila cheia:** o pedido é recusado (Console avisa; a ponte responde
+  `erro:` em `atr/comando/resposta`), em vez de travar quem pediu.
 - **Trabalho fora do mutex:** criar o processo (`fork`/`exec`) é feito depois
   de soltar o mutex, para o Console não esperar.
 
@@ -197,11 +226,59 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
 ### 3.3 `pthread_join` e `waitpid` no encerramento
 - **Onde:** `main.c`, depois que o Console retorna (`sair` ou fim da entrada).
 - **Ordem:** `encerrar = true` → acorda e espera o Gestor (não cria robô
-  durante o fim) → espera Organizador e Simulador → `SIGTERM` + `waitpid` em
+  durante o fim) → espera Organizador, Simulador e Ponte MQTT → `SIGTERM` + `waitpid` em
   cada robô → Coletor grava o que falta e termina → `mq_unlink`,
   `sem_unlink`, `shm_unlink`.
 - **Sem isso:** destruir mutexes ou desmapear a memória enquanto alguém ainda
   a usa; processos zumbis; eventos finais perdidos.
+
+### 3.4 Simulador do hardware (`simulador.c`)
+- **Onde:** `simulador.c: tarefa_simulador`, uma thread do processo central,
+  período 100 ms (`PERIODO_SIMULADOR_MS`).
+- **O que faz (item 8 do enunciado):** lê o setpoint que a Navegação escreve
+  no `hw` (`o_sp_posicao_x/y`) e anda 1 célula por ciclo em direção a ele
+  (`i_posicao_x/y`); gasta bateria ao andar e recarrega na estação; a garra
+  (`i_carga_atracada`) segue `o_acoplar_e_erguer`. Com `i_falha` ou 0% o
+  robô não anda.
+- **Interface gráfica do simulador (itens 8a–8d):** é o painel "Simulação"
+  da Tela de Operação (o enunciado permite que seja a mesma tela). Gerar
+  defeito, baixar a bateria e incluir caixas viram comandos em `atr/comando`
+  (`falha`, `ok`, `bateria`, `caixa`); um novo robô é publicado em
+  `atr/robo/novo` (ver 3.5).
+- **Problema:** o simulador escreve no `hw` de cada robô enquanto a Status e
+  a Navegação (outro processo) leem e escrevem nos mesmos campos.
+- **Como:** trava o `Robo.mutex` (PROCESS_SHARED) de cada robô durante o
+  ciclo daquele robô; `clock_nanosleep` absoluto para o período.
+  `celulas_andadas[]` só é usado por esta thread (sem mutex).
+- **Sem o mutex:** a Status poderia ler x novo com y antigo, ou a bateria no
+  meio de uma atualização.
+- **Por que em C, no processo central:** usa a memória compartilhada
+  diretamente, sem traduzir o `hw` de cada robô em mensagens MQTT a cada 100 ms.
+
+### 3.5 Ponte MQTT (`ponte_mqtt.c`)
+- **Onde:** `tarefa_ponte_mqtt` (200 ms, publica `atr/status`) e a thread de
+  rede da libmosquitto (callbacks `ao_conectar`, `ao_receber`, `ao_desconectar`).
+- **Tópicos:** publica `atr/mapa` (retained), `atr/status`,
+  `atr/comando/resposta`; o Coletor publica `atr/eventos`; assina
+  `atr/comando` (linha igual à do Console) e `atr/robo/novo` (novo robô).
+- **Leitura do status:** copia cada slot com o `Robo.mutex` para uma variável
+  local e monta o JSON fora do mutex, lendo só o **buffer de status** (nunca
+  o `hw`); as caixas são copiadas de uma vez com `mutex_caixas`. Sem a cópia,
+  o robô ficaria travado enquanto o texto é montado.
+- **Comandos (`atr/comando`):** `executar_comando()` não tem variáveis
+  `static` que mudem e só usa os mecanismos já existentes, então pode rodar
+  na thread de rede ao mesmo tempo que o Console.
+- **Novo robô (`atr/robo/novo`):** o enunciado diz que cada novo robô envia
+  uma mensagem via MQTT (simulador) para o Gestor de Robôs. O payload é
+  `"x y"` ou vazio (posição padrão). A ponte valida com `posicao_valida` e
+  chama `pedir_novo_robo` — a mesma fila de pedidos do comando `novo` (3.1):
+  a thread de rede é só mais um produtor. O resultado (`ok` ou `erro: ...`)
+  vai para `atr/comando/resposta`. Sem a fila, a thread de rede teria de
+  fazer `fork`/`exec` ela mesma e ficaria parada durante a criação.
+- **`sem_getvalue`:** leitura instantânea da ocupação das passagens só para
+  exibir; o valor pode mudar logo depois, mas nada é decidido com ele.
+- **Broker fora do ar:** a ponte tenta a primeira conexão a cada 2 s; o resto
+  do sistema não depende dela (publicações sem conexão são descartadas).
 
 ---
 
@@ -233,7 +310,7 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
 ## 5. Tarefas periódicas sem deriva
 
 - **Onde:** laços da Navegação (100 ms), Status (200 ms), Organizador
-  (500 ms) e Simulador (100 ms); função `somar_ms` em `comum.h`.
+  (500 ms), Simulador (100 ms) e Ponte MQTT (200 ms); função `somar_ms` em `comum.h`.
 - **Como:** cada tarefa guarda o instante da **próxima** ativação e dorme até
   ele com `clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, ...)`.
 - **Sem tempo absoluto:** com `sleep(periodo)` relativo, o tempo gasto no
@@ -325,16 +402,26 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
 15. Na disputa por uma passagem cheia não há fila de ordem: quem conseguir o
     semáforo primeiro entra (o `sem_timedwait` tenta de novo a cada ciclo).
 
-**Simulador-stub**
+**Simulador**
 16. 1 célula por tick (100 ms); bateria cai 1% a cada 5 células e sobe 2% por
     tick na estação; `i_carga_atracada` segue `o_acoplar_e_erguer` no tick seguinte.
+    O simulador roda em C, dentro do processo central; a tela dele é o
+    painel "Simulação" da Tela de Operação (mesma tela, como o enunciado permite).
+17. O comando `novo` do Console continua existindo (os cenários de teste não
+    dependem do broker); na operação normal o novo robô vem por `atr/robo/novo`.
 
 **Infraestrutura**
-17. `mq_send` bloqueia se a fila estiver cheia (10 mensagens): uma tarefa
+18. `mq_send` bloqueia se a fila estiver cheia (10 mensagens): uma tarefa
     poderia esperar o Coletor ou a Navegação de um robô esvaziar a fila.
-18. Fila de pedidos de novo robô cheia (8) → pedido recusado.
-19. Ctrl+C usa o comportamento padrão do `SIGINT` (mata tudo, sem limpeza);
+19. Fila de pedidos de novo robô cheia (8) → pedido recusado.
+20. Ctrl+C usa o comportamento padrão do `SIGINT` (mata tudo, sem limpeza);
     as sobras de IPC são removidas na próxima inicialização.
+21. `historico` lê o arquivo inteiro a cada pedido para pegar as últimas
+    linhas (simples; os logs são pequenos). A resposta é truncada se passar
+    de `TAMANHO_RESPOSTA` (32 KB).
+22. Na tela, o histórico mostrado é a primeira resposta de `historico` que
+    chega depois do clique; se duas respostas de comandos chegarem no mesmo
+    ciclo de 200 ms da tela, a do `historico` pode ser perdida (basta clicar de novo).
 
 ---
 

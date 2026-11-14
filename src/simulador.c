@@ -1,7 +1,17 @@
 /*
- * sim_stub.c — Simulador-stub do hardware dos robôs (só Etapa 1).
+ * simulador.c — Simulador do hardware dos robôs (item 8 do enunciado).
  *
- * Na Etapa 2 ele é substituído pelo simulador em Python (via MQTT).
+ * Faz o papel do robô físico: lê o setpoint que a Navegação escreve no hw
+ * (o_sp_posicao_x/y) e atualiza a posição (i_posicao_x/y), simula a
+ * bateria (gasto ao andar e recarga na estação) e a garra
+ * (i_carga_atracada responde a o_acoplar_e_erguer).
+ *
+ * A interface gráfica do simulador (itens 8a–8d: gerar defeito, baixar a
+ * bateria, incluir caixas, criar novos robôs) é o painel "Simulação" da
+ * Tela de Operação (o enunciado permite que seja a mesma tela). Ele manda
+ * comandos por MQTT: atr/comando ("falha", "ok", "bateria", "caixa") e
+ * atr/robo/novo (ver ponte_mqtt.c). O simulador roda em C, dentro do
+ * processo central, para usar a memória compartilhada diretamente.
  *
  * Thread: tarefa_simulador (uma só, no processo central), periódica com
  * período PERIODO_SIMULADOR_MS (100 ms). A cada ciclo, para cada robô ativo:

@@ -6,19 +6,21 @@
  *   prepara o slot do robô na memória compartilhada, cria a fila
  *   /atr_robo_<id> e cria o PROCESSO do robô com fork() + execl("./robo").
  *
- * Quem produz os pedidos: o Console (Etapa 1), via pedir_novo_robo().
+ * Quem produz os pedidos (via pedir_novo_robo()): o Console (comando
+ * "novo", usado nos cenários de teste) e a ponte MQTT (tópico
+ * atr/robo/novo, publicado pelo simulador, ver ponte_mqtt.c).
  *
  * Sincronização:
  *   - Fila circular de pedidos + mutex + variável de condição
  *     (produtor-consumidor clássico):
- *       * mutex_pedidos: Console e Gestor mexem em pedidos[], inicio e
- *         quantidade; sem o mutex os dois poderiam alterar os índices ao
- *         mesmo tempo e um pedido seria perdido ou lido duas vezes.
+ *       * mutex_pedidos: Console, ponte MQTT e Gestor mexem em pedidos[],
+ *         inicio e quantidade; sem o mutex dois deles poderiam alterar os
+ *         índices ao mesmo tempo e um pedido seria perdido ou lido duas vezes.
  *       * cond_pedidos: o Gestor DORME enquanto a fila está vazia (não gasta
- *         CPU) e o Console o ACORDA quando coloca um pedido.
+ *         CPU) e quem coloca um pedido (Console ou ponte) o ACORDA.
  *   - Mutex de cada robô (na memória compartilhada) ao mexer no slot.
  *   - enviar_para_robo(): manda uma mensagem pela fila /atr_robo_<id>
- *     (usada pelo Console e, no passo 6, pelo Organizador).
+ *     (usada pelo Console e pelo Organizador).
  *   - O Organizador fica sabendo do robô novo de forma ASSÍNCRONA: o Gestor
  *     marca ativo = true no slot e incrementa robos_novos (protegido por
  *     mutex_novos, porque Gestor e Organizador são threads diferentes);
@@ -62,9 +64,10 @@ int pegar_robos_novos(void)
     return n;
 }
 
-/* PRODUTOR (Console): coloca um pedido na fila e acorda o Gestor.
- * Se a fila estiver cheia, recusa (retorna false) em vez de bloquear o
- * Console. Com x < 0 usa a posição inicial padrão. */
+/* PRODUTOR (Console ou ponte MQTT): coloca um pedido e acorda o Gestor.
+ * Se a fila estiver cheia, recusa (retorna false) em vez de bloquear quem
+ * pediu (Console ou thread de rede do MQTT). Com x < 0 usa a posição
+ * inicial padrão. */
 bool pedir_novo_robo(int x, int y)
 {
     bool aceito = false;
@@ -248,8 +251,8 @@ void *tarefa_gestor(void *arg)
         quantidade--;
         pthread_mutex_unlock(&mutex_pedidos);
 
-        /* Fora do mutex: criar processo é demorado e o Console não deve
-         * ficar esperando por isso. */
+        /* Fora do mutex: criar processo é demorado e quem pede (Console
+         * ou ponte) não deve ficar esperando por isso. */
         atender_pedido(p);
     }
     return NULL;

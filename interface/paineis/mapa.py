@@ -11,8 +11,8 @@ imagem ocupa toda a largura do painel (o navegador escala as duas juntas).
 
 Clique no mapa (o interactive_image devolve o ponto em pixels da imagem,
 já desfazendo a escala):
-  - com o modo "posicionar novo robô" ligado (painel Simulação): envia
-    "novo <x> <y>" para a célula clicada e desliga o modo;
+  - com o modo "posicionar novo robô" ligado (painel Simulação): publica
+    "<x> <y>" da célula clicada em atr/robo/novo e desliga o modo;
   - em cima de um robô (mapa_svg.robo_no_ponto): seleciona o robô;
   - no chão, com um robô em MANUAL selecionado: envia "goto <id> <x> <y>"
     para a célula clicada (mapa_svg.celula_do_ponto); o C valida e responde.
@@ -37,9 +37,10 @@ def _data_uri(svg):
 
 
 class PainelMapa:
-    def __init__(self, ao_selecionar, enviar, modo_clique):
+    def __init__(self, ao_selecionar, enviar, enviar_novo_robo, modo_clique):
         self.ao_selecionar = ao_selecionar
         self.enviar = enviar
+        self.enviar_novo_robo = enviar_novo_robo   # publica em atr/robo/novo
         self.modo_clique = modo_clique    # {"novo_robo": bool}, da página
         self.mapa = None          # último atr/mapa desenhado no fundo
         self.selecionado = None   # id do robô selecionado
@@ -88,11 +89,11 @@ class PainelMapa:
         self.dica.set_text(texto)
 
     def _clique(self, evento):
-        """Novo robô (modo ligado) -> novo; robô no ponto -> seleciona;
+        """Novo robô (modo ligado) -> atr/robo/novo; robô no ponto -> seleciona;
         chão + robô MANUAL selecionado -> goto."""
         if self.modo_clique["novo_robo"]:
             x, y = mapa_svg.celula_do_ponto(evento.image_x, evento.image_y)
-            self.enviar(f"novo {x} {y}")
+            self.enviar_novo_robo(x, y)
             self.modo_clique["novo_robo"] = False
             return
         rid = mapa_svg.robo_no_ponto(evento.image_x, evento.image_y, self.status, self.direcoes)

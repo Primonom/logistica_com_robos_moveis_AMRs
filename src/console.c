@@ -20,6 +20,9 @@
  *   goto <id> <x> <y> envia GOTO à Navegação do robô (só em modo manual)
  *   manual <id> / auto <id>  envia MODO_MANUAL / MODO_AUTO ao robô
  *   caixa <tam> <baia> <zona>  coloca uma caixa no fim da fila (zona A-D)
+ *   historico [n]     últimas n linhas (padrão 30, máx. 100) de
+ *                     logs/eventos.csv e logs/cargas.csv (para a operação
+ *                     remota ver os registros gravados em disco)
  * Só no Console (stdin) — pela ponte respondem "não aceito":
  *   espera <seg>      pausa a leitura de comandos (para os cenários de teste)
  *   aguarda <id> <ESTADO> [timeout_s]  pausa até o robô estar no estado
@@ -34,9 +37,10 @@
  *   - pedir_novo_robo(): fila de pedidos do Gestor (mutex + cond, gestor.c).
  *   - "status" lê SÓ o buffer de status (nunca o hw), copiando cada slot
  *     com o mutex do robô travado, e as caixas com mem->mutex_caixas.
- *   - bateria/falha/ok fazem o papel do HARDWARE (emulam o simulador) e
- *     por isso escrevem no hw, com o mutex do robô travado, porque o
- *     simulador e o processo robo usam esses campos ao mesmo tempo.
+ *   - bateria/falha/ok fazem o papel do HARDWARE (são os comandos da tela
+ *     do simulador, itens 8a e 8b) e por isso escrevem no hw, com o mutex
+ *     do robô travado, porque o simulador e o processo robo usam esses
+ *     campos ao mesmo tempo.
  *   - goto/manual/auto: fila de mensagens do robô (enviar_para_robo abre e
  *     fecha a fila a cada envio; mq_send é atômico). Antes de enviar, goto
  *     confere modo_automatico e manual confere e_estado (buffer de status),
@@ -45,6 +49,12 @@
  *     pode mudar entre a conferência e a chegada da mensagem).
  *   - caixa: adicionar_caixa() usa mem->mutex_caixas (o Organizador mexe na
  *     mesma fila de caixas).
+ *   - historico: só LÊ os arquivos de log, abrindo-os de novo (FILE
+ *     próprio, modo "r"), sem mutex. Não precisa: o único escritor é o
+ *     Coletor, que só ACRESCENTA linhas no fim e dá fflush depois de cada
+ *     uma; nada já escrito muda. No pior caso a leitura pega a última linha
+ *     pela metade (sem '\n'), e essa linha é descartada. Os vetores de
+ *     linhas são locais, então duas chamadas ao mesmo tempo não se misturam.
  *   - "aguarda" (só Console) lê o e_estado do buffer de status a cada
  *     100 ms, com o mutex do robô travado.
  */
@@ -54,6 +64,10 @@
 #include <stdarg.h>
 #include "comum.h"
 #include "mapa.h"
+
+#define HISTORICO_PADRAO  30    /* linhas de cada arquivo no "historico" */
+#define HISTORICO_MAX     100
+#define TAMANHO_LINHA_LOG 256   /* data/hora + robô + texto (128) cabem */
 
 const char *nome_estado(Estado e)
 {
@@ -290,8 +304,46 @@ static bool comando_caixa(const char *linha, char *resp, int tam)
     return responder(true, resp, tam, "ok");
 }
 
+/* Acrescenta à resposta as últimas n linhas completas de um arquivo de log.
+ * Guarda as linhas num vetor circular: a linha k vai para ultimas[k % n],
+ * então no fim ficam só as n mais recentes. Ver no topo por que não há mutex. */
+static int anexar_ultimas_linhas(const char *caminho, int n, char *resp, int tam, int usado)
+{
+    char ultimas[HISTORICO_MAX][TAMANHO_LINHA_LOG];
+    char linha[TAMANHO_LINHA_LOG];
+    FILE *f;
+    int total = 0, k;
+
+    usado = anexar(resp, tam, usado, "# %s\n", caminho);
+    f = fopen(caminho, "r");
+    if (f == NULL)
+        return anexar(resp, tam, usado, "(arquivo ainda nao existe)\n");
+    while (fgets(linha, sizeof(linha), f) != NULL) {
+        if (strchr(linha, '\n') == NULL)
+            continue;  /* linha incompleta: o Coletor ainda está escrevendo */
+        strcpy(ultimas[total % n], linha);
+        total++;
+    }
+    fclose(f);
+    for (k = (total > n ? total - n : 0); k < total; k++)
+        usado = anexar(resp, tam, usado, "%s", ultimas[k % n]);
+    return usado;
+}
+
+/* Comando "historico [n]": últimas n linhas dos dois arquivos do Coletor. */
+static bool comando_historico(const char *linha, char *resp, int tam)
+{
+    int n = HISTORICO_PADRAO, usado;
+
+    if (sscanf(linha, "historico %d", &n) == 1 && (n < 1 || n > HISTORICO_MAX))
+        return responder(false, resp, tam, "uso: historico [1..%d]", HISTORICO_MAX);
+    usado = anexar_ultimas_linhas("logs/eventos.csv", n, resp, tam, 0);
+    anexar_ultimas_linhas("logs/cargas.csv", n, resp, tam, usado);
+    return true;
+}
+
 /* Executa UMA linha de comando e escreve a resposta em "resp": "ok", a
- * tabela do "status", ou a mensagem de erro (retorna false no erro).
+ * tabela do "status", as linhas do "historico", ou a mensagem de erro (retorna false no erro).
  * Chamada pelo Console (thread principal) e pela ponte MQTT (thread de
  * rede da libmosquitto) — ver no topo por que é seguro. */
 bool executar_comando(const char *linha, char *resp, int tam)
@@ -310,6 +362,7 @@ bool executar_comando(const char *linha, char *resp, int tam)
     if (strcmp(comando, "manual") == 0)  return comando_modo(linha, MODO_MANUAL, resp, tam);
     if (strcmp(comando, "auto") == 0)    return comando_modo(linha, MODO_AUTO, resp, tam);
     if (strcmp(comando, "caixa") == 0)   return comando_caixa(linha, resp, tam);
+    if (strcmp(comando, "historico") == 0) return comando_historico(linha, resp, tam);
     if (strcmp(comando, "espera") == 0 || strcmp(comando, "aguarda") == 0 ||
         strcmp(comando, "sair") == 0)
         return responder(false, resp, tam, "comando %s nao aceito aqui (so no Console)", comando);

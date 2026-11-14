@@ -172,7 +172,7 @@ class PainelRobos:
         self.cards = {}
         with ui.card().classes("painel w-full"):
             ui.label("Robôs").classes("painel-titulo")
-            self.vazio = ui.label("Nenhum robô ativo. Crie um pelo Console: novo [x y]") \
+            self.vazio = ui.label("Nenhum robô ativo. Crie um no painel Simulação ou clicando no mapa.") \
                 .classes("texto-fraco")
             self.grade = ui.element("div").classes("grade-cards w-full")
 

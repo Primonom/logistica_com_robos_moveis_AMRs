@@ -30,7 +30,7 @@
 #define PERIODO_NAVEGACAO_MS    100   /* T1 */
 #define PERIODO_STATUS_MS       200   /* T2 */
 #define PERIODO_ORGANIZADOR_MS  500   /* T3 */
-#define PERIODO_SIMULADOR_MS    100   /* simulador-stub (Etapa 1) */
+#define PERIODO_SIMULADOR_MS    100   /* simulador do hardware (simulador.c) */
 #define PERIODO_PONTE_MS        200   /* ponte MQTT: publica atr/status */
 
 /* Avança o instante "t" em "ms" milissegundos.
@@ -240,7 +240,7 @@ void formatar_data_hora(struct timespec quando, char *saida, int tamanho);
 
 /* ---------- gestor.c ---------- */
 void *tarefa_gestor(void *arg);      /* thread (arg não usado) */
-bool pedir_novo_robo(int x, int y);  /* produtor: chamado pelo Console */
+bool pedir_novo_robo(int x, int y);  /* produtor: Console e ponte MQTT */
 void acordar_gestor(void);           /* usado no encerramento */
 void enviar_para_robo(int id, const MensagemRobo *msg); /* fila /atr_robo_<id> */
 int pegar_robos_novos(void);         /* Organizador: quantos robôs novos desde a última vez */
@@ -255,7 +255,7 @@ void *tarefa_ponte_mqtt(void *arg);  /* thread (arg não usado) */
 void ponte_publicar(const char *topico, const char *texto); /* qualquer thread */
 void ponte_destruir(void);           /* main, DEPOIS de todas terminarem */
 
-/* ---------- sim_stub.c (processo central, só Etapa 1) ---------- */
+/* ---------- simulador.c (processo central) ---------- */
 void *tarefa_simulador(void *arg);   /* thread (arg não usado) */
 
 /* ---------- Estado interno do processo robo ----------
@@ -285,7 +285,7 @@ void *tarefa_status(void *arg);      /* thread (arg não usado) */
 void *tarefa_navegacao(void *arg);   /* thread (arg não usado) */
 
 /* ---------- console.c ---------- */
-#define TAMANHO_RESPOSTA 8192        /* cabe a tabela do "status" inteira */
+#define TAMANHO_RESPOSTA 32768       /* cabe o "status" e o "historico 100" */
 void executar_console(void);         /* roda na thread principal */
 bool executar_comando(const char *linha, char *resp, int tam); /* Console e ponte MQTT */
 const char *nome_estado(Estado e);
