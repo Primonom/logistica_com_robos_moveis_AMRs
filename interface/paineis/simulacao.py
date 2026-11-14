@@ -58,7 +58,8 @@ class PainelSimulacao:
             ui.button("Cenário de demonstração", icon="movie", on_click=iniciar_demonstracao) \
                 .props("no-caps unelevated color=amber-8 text-color=black").classes("w-full")
             ui.label("Para o vídeo: 5 atos com pausas para narrar. Use com o sistema "
-                     "recém-iniciado sem caixas (./logistica testes/sem_caixas.txt).").classes("dica")
+                     "recém-iniciado sem caixas e o mapa da semente 42 "
+                     "(ATR_SEMENTE=42 ./logistica testes/sem_caixas.txt).").classes("dica")
 
     def _novo(self):
         if self.x.value is not None and self.y.value is not None:

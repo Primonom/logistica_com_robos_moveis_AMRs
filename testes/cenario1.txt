@@ -1,7 +1,8 @@
-# Cenário 1: 1 robô, 1 caixa de tamanho 1.
-# Esperado: robô vai à baia 1, ergue, leva até a zona A (passando por P1
-# e P2) e solta. logs/cargas.csv recebe "1;1;A;0".
-# Rodar: ./logistica testes/sem_caixas.txt < testes/cenario1.txt
+# Cenário 1: 1 robô, 1 caixa de tamanho 1 (mapa da semente 42).
+# Esperado: robô nasce na posição padrão (8,15), vai à baia 1, ergue, leva
+# até a zona A pelo caminho A* (atravessando uma passagem de cada parede)
+# e solta. logs/cargas.csv recebe "1;1;A;0".
+# Rodar: ATR_SEMENTE=42 ./logistica testes/sem_caixas.txt < testes/cenario1.txt
 novo
 aguarda 0 DISPONIVEL
 caixa 1 1 A

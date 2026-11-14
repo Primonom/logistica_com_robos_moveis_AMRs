@@ -10,6 +10,8 @@
  * Este arquivo não cria threads nem processos. Ele só descreve os dados.
  * O único mecanismo de sincronização declarado aqui são os mutexes que
  * ficam DENTRO da memória compartilhada (ver comentários nas structs).
+ * O mapa (mem->mapa, struct Mapa de mapa.h) também fica na memória
+ * compartilhada, mas sem mutex: é só leitura depois de gerado (ver mapa.h).
  */
 #ifndef COMUM_H
 #define COMUM_H
@@ -20,11 +22,12 @@
 #include <sys/types.h>
 #include <time.h>
 #include <mqueue.h>
+#include "mapa.h"
 
 /* ---------- Limites ---------- */
 #define MAX_ROBOS  16
 #define MAX_CAIXAS 64
-#define MAX_ROTA_STATUS 8     /* waypoints da rota publicados no buffer de status */
+#define MAX_ROTA_STATUS 32    /* "cantos" da rota publicados no buffer de status */
 
 /* ---------- Períodos das tarefas periódicas (em milissegundos) ---------- */
 #define PERIODO_NAVEGACAO_MS    100   /* T1 */
@@ -106,7 +109,7 @@ typedef struct {
     Estado   e_estado;
     double   distancia_total;
     int      destino_x, destino_y;  /* fim da rota atual (-1 = sem rota) */
-    int      n_rota;                /* próximos waypoints da rota (até 8): */
+    int      n_rota;                /* próximos cantos do caminho (até 32): */
     int      rota_x[MAX_ROTA_STATUS], rota_y[MAX_ROTA_STATUS]; /* a tela desenha o caminho */
 
     bool     modo_automatico;
@@ -144,6 +147,12 @@ typedef struct {
 /* Conteúdo completo de /atr_shm. */
 typedef struct {
     Robo robos[MAX_ROBOS];
+
+    /* Mapa desta execução (paredes, passagens sorteadas, obstáculos).
+     * POR QUE fica sem mutex: é escrito só por gerar_mapa() antes de
+     * existirem as outras threads e os robôs; depois só é lido, e leituras
+     * simultâneas não são condição de corrida (ver a struct Mapa em mapa.h). */
+    Mapa mapa;
 
     /* POR QUE: a lista de caixas é alterada pelo Console (nova caixa) e lida/
      * alterada pelo Organizador (escolhe e marca caixas). O mutex evita que
@@ -200,6 +209,10 @@ typedef struct {
     int x, y;       /* destino (quando fizer sentido) */
     int carga_id;
     int lider_id;
+    /* IR_ZONA: a equipe inteira (o líder usa para saber quando todos já
+     * saíram de uma passagem antes de liberá-la). */
+    int n_membros;
+    int membros[TAMANHO_MAX_CAIXA];
 } MensagemRobo;
 
 /* Tipos de mensagem para o Coletor de Dados. */
@@ -274,7 +287,7 @@ typedef struct {
     int    recarga_x, recarga_y;  /* estação escolhida pela Status */
     int    destino_x, destino_y;  /* Navegação -> Status: fim da rota atual
                                    * (-1 = sem rota), publicado no buffer */
-    int    n_rota;                /* Navegação -> Status: próximos waypoints */
+    int    n_rota;                /* Navegação -> Status: próximos cantos do caminho */
     int    rota_x[MAX_ROTA_STATUS], rota_y[MAX_ROTA_STATUS];
 } EstadoLocal;
 

@@ -1,11 +1,14 @@
-# Cenário 2: 4 robôs, 1 caixa de tamanho 3 (acoplamento síncrono).
-# Esperado: a equipe são os 3 robôs mais próximos da baia 2 (1, 0 e 3);
-# o robô 2 (longe) fica DISPONIVEL. O robô 1 chega primeiro e fica em
-# AGUARDANDO_EQUIPE até os outros chegarem; aí todos recebem ACOPLAR no
-# mesmo ciclo. No transporte só o líder (0) usa as passagens.
+# Cenário 2: 4 robôs, 1 caixa de tamanho 3 (acoplamento síncrono; semente 42).
+# Esperado: a equipe são os 3 robôs de MENOR CAMINHO A* até a baia 2:
+# 1 (de (5,15), 6 passos), 0 (de (8,15), 9) e 3 (de (10,20)). O robô 2,
+# em (22,15), está do outro lado da parede 1 e precisaria atravessar a P1:
+# fica DISPONIVEL. O líder é o 1 (o mais perto da baia), não o de menor id.
+# O robô 1 chega primeiro e fica em AGUARDANDO_EQUIPE até os outros
+# chegarem; aí todos recebem ACOPLAR no mesmo ciclo. No transporte só o
+# líder usa os semáforos das passagens.
 novo 8 15
 novo 5 15
-novo 30 15
+novo 22 15
 novo 10 20
 aguarda 3 DISPONIVEL
 caixa 3 2 C
@@ -13,6 +16,6 @@ aguarda 1 AGUARDANDO_EQUIPE
 status
 aguarda 3 OPERANDO_CARGA
 status
-aguarda 0 DISPONIVEL 60
+aguarda 1 DISPONIVEL 60
 status
 sair

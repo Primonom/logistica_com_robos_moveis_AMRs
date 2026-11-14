@@ -1,16 +1,19 @@
-# Cenário 3: falha e bateria baixa no meio do transporte.
-# Equipe de 2 (robôs 0 = líder e 1) levando caixa de tamanho 2 da baia 2
-# para a zona C. O robô 2 fica longe e não participa.
+# Cenário 3: falha e bateria baixa no meio do transporte (semente 42).
+# Equipe de 2 (robôs 0 = líder, mais perto da baia, e 1) levando caixa de
+# tamanho 2 da baia 2 para a zona C. O robô 2 fica do outro lado da
+# parede 1 e não participa.
 # Esperado:
 #  - bateria do líder vai a 28% no início do transporte: como ele está
 #    com carga, NÃO vai recarregar; só depois de soltar a caixa;
 #  - falha do seguidor (1) no meio do caminho: a equipe toda recebe
 #    PAUSAR; com "ok 1" recebe CONTINUAR e entrega a caixa;
-#  - depois da entrega o líder (abaixo de 20%) vai recarregar e volta a
-#    DISPONIVEL com 100%.
+#  - o líder só libera cada passagem (sem_post) depois que o seguidor
+#    também saiu dela;
+#  - depois da entrega o líder (abaixo de 20%) vai recarregar na estação
+#    de menor caminho e volta a DISPONIVEL com 100%.
 novo 5 15
 novo 6 15
-novo 30 20
+novo 22 20
 aguarda 2 DISPONIVEL
 caixa 2 2 C
 aguarda 1 OPERANDO_CARGA

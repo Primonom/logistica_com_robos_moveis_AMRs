@@ -11,10 +11,13 @@
  *     rodam NELA.
  *
  * Tópicos:
- *   atr/mapa    (publica) JSON do mapa, gerado a partir de mapa.h (fonte
- *               única da verdade). "Retained": o broker guarda a última
- *               cópia e entrega a quem assinar depois. Publicado a cada
- *               conexão.
+ *   atr/mapa    (publica) JSON do mapa DESTA execução, gerado a partir de
+ *               mem->mapa e de mapa.h (fonte única da verdade): largura,
+ *               altura, semente, corredor_y, baias, zonas, estacoes,
+ *               paredes (retângulos), obstaculos ([x,y]) e passagens
+ *               (nome, capacidade, celulas do túnel e regiao). "Retained":
+ *               o broker guarda a última cópia e entrega a quem assinar
+ *               depois. Publicado a cada conexão.
  *   atr/status  (publica) JSON com robôs, caixas, passagens, a caixa que o
  *               Organizador está esperando (e quantos robôs livres havia) e
  *               contadores.
@@ -46,7 +49,9 @@
  *     para variáveis locais e só monta o texto DEPOIS de soltar o mutex
  *     (montar texto é lento; não vale segurar o robô parado por isso).
  *   - mem->mutex_caixas: copia o vetor de caixas de uma vez, pelo mesmo motivo.
- *   - sem_getvalue nos semáforos das passagens: é só uma leitura instantânea
+ *   - mem->mapa: só leitura, sem mutex (não muda depois de gerado).
+ *   - sem_getvalue nos semáforos das passagens (sem_passagem[], abertos
+ *     pelo main antes das threads): é só uma leitura instantânea
  *     para EXIBIÇÃO (o valor pode mudar logo depois); não serve para decidir
  *     nada, e por isso não precisa de proteção extra.
  *   - libmosquitto: mosquitto_publish pode ser chamado desta thread, do
@@ -76,7 +81,7 @@
 
 #define BROKER_PORTA    1883
 #define MANTER_VIVO_S   10      /* keepalive do MQTT, em segundos */
-#define TAMANHO_JSON    16384   /* cabe 16 robôs + 64 caixas com folga */
+#define TAMANHO_JSON    32768   /* cabe 16 robôs (rota de 32 cantos) + 64 caixas com folga */
 #define CICLOS_ENTRE_TENTATIVAS 10  /* 10 x 200 ms = tenta conectar a cada 2 s */
 
 static struct mosquitto *cliente = NULL;  /* ver "Sincronização" no topo */
@@ -117,24 +122,71 @@ static void publicar(struct mosquitto *mosq, const char *topico, Json *j, bool r
 
 /* ---------- atr/mapa ---------- */
 
-/* Um retângulo de passagem: {"x1":..,"y1":..,"x2":..,"y2":..}. */
-static void json_retangulo(Json *j, int x1, int y1, int x2, int y2, bool virgula)
+/* Retângulos de parede: cada parede é cortada pelas suas passagens, então
+ * vira um retângulo por trecho contínuo de células PAREDE na coluna. */
+static void json_paredes(Json *j)
 {
-    json_add(j, "{\"x1\":%d,\"y1\":%d,\"x2\":%d,\"y2\":%d}%s",
-             x1, y1, x2, y2, virgula ? "," : "");
+    int w, y, y0, x, n = 0;
+
+    json_add(j, ",\"paredes\":[");
+    for (w = 0; w < N_PAREDES; w++) {
+        x = PAREDE_X[w];
+        y0 = 0;
+        for (y = 0; y <= MAPA_ALTURA; y++) {
+            if (y < MAPA_ALTURA && mem->mapa.tipo[y][x] == PAREDE)
+                continue;
+            if (y > y0)   /* fim de um trecho y0..y-1 */
+                json_add(j, "%s{\"x1\":%d,\"y1\":%d,\"x2\":%d,\"y2\":%d}", n++ ? "," : "",
+                         x, y0, x + ESPESSURA_PAREDE - 1, y - 1);
+            y0 = y + 1;
+        }
+    }
+    json_add(j, "]");
 }
 
-/* Monta o JSON do mapa só com as constantes de mapa.h. As passagens são
- * descritas como o código as trata (dentro_de_passagem): P1 e P2 são
- * colunas inteiras, P3 são dois trechos da coluna x = 45. */
+static void json_obstaculos(Json *j)
+{
+    int x, y, n = 0;
+
+    json_add(j, ",\"obstaculos\":[");
+    for (y = 0; y < MAPA_ALTURA; y++)
+        for (x = 0; x < MAPA_LARGURA; x++)
+            if (mem->mapa.tipo[y][x] == OBSTACULO)
+                json_add(j, "%s[%d,%d]", n++ ? "," : "", x, y);
+    json_add(j, "]");
+}
+
+/* Passagens: "celulas" = túnel (dentro da parede); "regiao" = túnel + as
+ * duas bocas (onde vale o limite de capacidade). */
+static void json_passagens_mapa(Json *j)
+{
+    const Passagem *p;
+    int i, x;
+
+    json_add(j, ",\"passagens\":[");
+    for (i = 0; i < N_PASSAGENS; i++) {
+        p = &mem->mapa.passagens[i];
+        json_add(j, "%s{\"nome\":\"P%d\",\"capacidade\":%d,\"celulas\":[",
+                 i ? "," : "", i + 1, p->capacidade);
+        for (x = p->x_entrada + 1; x < p->x_saida; x++)
+            json_add(j, "%s[%d,%d]", x > p->x_entrada + 1 ? "," : "", x, p->y);
+        json_add(j, "],\"regiao\":[");
+        for (x = p->x_entrada; x <= p->x_saida; x++)
+            json_add(j, "%s[%d,%d]", x > p->x_entrada ? "," : "", x, p->y);
+        json_add(j, "]}");
+    }
+    json_add(j, "]");
+}
+
+/* Monta o JSON do mapa a partir de mem->mapa e das constantes de mapa.h. */
 static void publicar_mapa(struct mosquitto *mosq)
 {
     Json j;
     int i;
 
     j.usado = 0;
-    json_add(&j, "{\"largura\":%d,\"altura\":%d,\"corredor_y\":%d,\"baias\":[",
-             MAPA_LARGURA, MAPA_ALTURA, CORREDOR_Y);
+    json_add(&j, "{\"largura\":%d,\"altura\":%d,\"semente\":%u,\"corredor_y\":%d,\"baias\":[",
+             MAPA_LARGURA, MAPA_ALTURA, mem->mapa.semente, CORREDOR_Y);
     for (i = 0; i < N_BAIAS; i++)
         json_add(&j, "{\"id\":%d,\"x\":%d,\"y\":%d}%s", i + 1, BAIA_X[i], BAIA_Y[i],
                  i < N_BAIAS - 1 ? "," : "");
@@ -146,16 +198,11 @@ static void publicar_mapa(struct mosquitto *mosq)
     for (i = 0; i < N_ESTACOES; i++)
         json_add(&j, "{\"x\":%d,\"y\":%d}%s", ESTACAO_X[i], ESTACAO_Y[i],
                  i < N_ESTACOES - 1 ? "," : "");
-
-    json_add(&j, "],\"passagens\":[");
-    json_add(&j, "{\"nome\":\"P1\",\"capacidade\":%d,\"retangulos\":[", CAPACIDADE_PASSAGEM[P1]);
-    json_retangulo(&j, P1_X_MIN, 0, P1_X_MAX, MAPA_ALTURA - 1, false);
-    json_add(&j, "]},{\"nome\":\"P2\",\"capacidade\":%d,\"retangulos\":[", CAPACIDADE_PASSAGEM[P2]);
-    json_retangulo(&j, P2_X_MIN, 0, P2_X_MAX, MAPA_ALTURA - 1, false);
-    json_add(&j, "]},{\"nome\":\"P3\",\"capacidade\":%d,\"retangulos\":[", CAPACIDADE_PASSAGEM[P3]);
-    json_retangulo(&j, P3_X, P3_CIMA_Y_MIN, P3_X, P3_CIMA_Y_MAX, true);
-    json_retangulo(&j, P3_X, P3_BAIXO_Y_MIN, P3_X, P3_BAIXO_Y_MAX, false);
-    json_add(&j, "]}]}");
+    json_add(&j, "]");
+    json_paredes(&j);
+    json_obstaculos(&j);
+    json_passagens_mapa(&j);
+    json_add(&j, "}");
 
     publicar(mosq, "atr/mapa", &j, true);  /* retained */
 }
@@ -180,7 +227,7 @@ static int lider_da_carga(int carga_id, const Caixa caixas[], int n_caixas)
     return -1;
 }
 
-/* Termina o robô com ,"rota":[[x,y],...]} (próximos waypoints). */
+/* Termina o robô com ,"rota":[[x,y],...]} (próximos cantos do caminho). */
 static void json_rota(Json *j, const Robo *r)
 {
     int k;
@@ -260,22 +307,22 @@ static void json_caixas(Json *j, const Caixa caixas[], int n,
 }
 
 /* Ocupação das passagens: livres = valor atual do semáforo. */
-static void json_passagens(Json *j, sem_t *semaforos[])
+static void json_passagens(Json *j)
 {
     int i, livres;
 
     json_add(j, ",\"passagens\":[");
     for (i = 0; i < N_PASSAGENS; i++) {
         /* Leitura instantânea, só para exibir (ver comentário do topo). */
-        if (sem_getvalue(semaforos[i], &livres) == -1)
+        if (sem_getvalue(sem_passagem[i], &livres) == -1)
             livres = -1;
         json_add(j, "%s{\"nome\":\"P%d\",\"capacidade\":%d,\"livres\":%d}",
-                 i > 0 ? "," : "", i + 1, CAPACIDADE_PASSAGEM[i], livres);
+                 i > 0 ? "," : "", i + 1, mem->mapa.passagens[i].capacidade, livres);
     }
     json_add(j, "]");
 }
 
-static void publicar_status(struct mosquitto *mosq, sem_t *semaforos[])
+static void publicar_status(struct mosquitto *mosq)
 {
     Json j;
     Caixa caixas[MAX_CAIXAS];
@@ -291,7 +338,7 @@ static void publicar_status(struct mosquitto *mosq, sem_t *semaforos[])
     n_caixas = copiar_caixas(caixas, &em_espera, &livres);
     ativos = json_robos(&j, caixas, n_caixas);
     json_caixas(&j, caixas, n_caixas, &pendentes, &andamento, &entregues);
-    json_passagens(&j, semaforos);
+    json_passagens(&j);
     json_add(&j, ",\"organizador\":{\"caixa_em_espera\":%d,\"robos_livres\":%d}",
              em_espera, livres);
     json_add(&j, ",\"contadores\":{\"robos_ativos\":%d,\"entregues\":%d,"
@@ -334,7 +381,7 @@ static void novo_robo(const char *payload, char *texto, int tam)
         snprintf(texto, tam, "erro: uso do atr/robo/novo: \"x y\" ou vazio");
         return;
     } else if (!posicao_valida(x, y)) {
-        snprintf(texto, tam, "erro: (%d,%d) fora do mapa ou dentro de passagem", x, y);
+        snprintf(texto, tam, "erro: (%d,%d) invalida: fora do mapa, parede, obstaculo ou passagem", x, y);
         return;
     }
     if (!pedir_novo_robo(x, y)) {
@@ -445,34 +492,20 @@ static bool tentar_conectar(struct mosquitto *mosq, bool *avisou)
     return true;
 }
 
-static void abrir_semaforos(sem_t *semaforos[])
-{
-    char nome[32];
-    int i;
-
-    for (i = 0; i < N_PASSAGENS; i++) {
-        snprintf(nome, sizeof(nome), "%s%d", PREFIXO_SEM_PASSAGEM, i + 1);
-        semaforos[i] = sem_open(nome, 0);
-        if (semaforos[i] == SEM_FAILED) { perror("sem_open ponte"); exit(1); }
-    }
-}
-
 void *tarefa_ponte_mqtt(void *arg)
 {
-    sem_t *semaforos[N_PASSAGENS];
     struct timespec proximo;
     bool avisou = false;
-    int i, ciclo = 0;
+    int ciclo = 0;
 
     (void)arg;
-    abrir_semaforos(semaforos);
 
     clock_gettime(CLOCK_MONOTONIC, &proximo);
     while (!atomic_load(&mem->encerrar)) {
         if (!rede_iniciada && ciclo % CICLOS_ENTRE_TENTATIVAS == 0)
             rede_iniciada = tentar_conectar(cliente, &avisou);
         if (rede_iniciada)
-            publicar_status(cliente, semaforos);
+            publicar_status(cliente);
         ciclo++;
         somar_ms(&proximo, PERIODO_PONTE_MS);
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &proximo, NULL);
@@ -480,7 +513,5 @@ void *tarefa_ponte_mqtt(void *arg)
 
     /* A conexão continua aberta: o Coletor ainda publica os últimos
      * eventos. Quem desconecta é ponte_destruir(), no fim do main. */
-    for (i = 0; i < N_PASSAGENS; i++)
-        sem_close(semaforos[i]);
     return NULL;
 }

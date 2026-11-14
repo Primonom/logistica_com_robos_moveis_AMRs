@@ -4,24 +4,18 @@ Rodar da raiz do repositório:
     interface/.venv/bin/python -m unittest discover -s interface/testes -t interface
 """
 import itertools
+import json
 import math
 import unittest
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
 import mapa_svg
 
-# Igual ao atr/mapa publicado pelo C (copiado de uma execução real).
-MAPA = {"largura": 60, "altura": 30, "corredor_y": 15,
-        "baias": [{"id": 1, "x": 3, "y": 4}, {"id": 2, "x": 3, "y": 11},
-                  {"id": 3, "x": 3, "y": 18}, {"id": 4, "x": 3, "y": 25}],
-        "zonas": [{"id": "A", "x": 56, "y": 4}, {"id": "B", "x": 56, "y": 11},
-                  {"id": "C", "x": 56, "y": 18}, {"id": "D", "x": 56, "y": 25}],
-        "estacoes": [{"x": 45, "y": 1}, {"x": 45, "y": 28}],
-        "passagens": [
-            {"nome": "P1", "capacidade": 3, "retangulos": [{"x1": 14, "y1": 0, "x2": 16, "y2": 29}]},
-            {"nome": "P2", "capacidade": 2, "retangulos": [{"x1": 39, "y1": 0, "x2": 41, "y2": 29}]},
-            {"nome": "P3", "capacidade": 1, "retangulos": [{"x1": 45, "y1": 2, "x2": 45, "y2": 13},
-                                                         {"x1": 45, "y1": 17, "x2": 45, "y2": 27}]}]}
+# O atr/mapa publicado pelo C com ATR_SEMENTE=42 (copiado de uma execução real).
+with open(Path(__file__).with_name("mapa_semente42.json"), encoding="utf-8") as arquivo:
+    MAPA = json.load(arquivo)
+CAPACIDADES = [p["capacidade"] for p in MAPA["passagens"]]    # (4, 2, 1, 3) na semente 42
 
 
 def robo(rid, x, y, estado="DISPONIVEL", lider=-1, carga=-1, bateria=80, rota=()):
@@ -30,10 +24,11 @@ def robo(rid, x, y, estado="DISPONIVEL", lider=-1, carga=-1, bateria=80, rota=()
             "carga": carga, "lider": lider, "rota": [list(p) for p in rota]}
 
 
-def status(robos, caixas=(), livres=(3, 2, 1)):
+def status(robos, caixas=(), livres=None):
+    livres = CAPACIDADES if livres is None else livres
     return {"t": "2026-10-09 10:00:00.000", "robos": list(robos), "caixas": list(caixas),
             "passagens": [{"nome": f"P{i + 1}", "capacidade": c, "livres": l}
-                          for i, (c, l) in enumerate(zip((3, 2, 1), livres))],
+                          for i, (c, l) in enumerate(zip(CAPACIDADES, livres))],
             "contadores": {"robos_ativos": len(robos), "entregues": 0, "pendentes": 0,
                            "em_andamento": 0}}
 
@@ -46,8 +41,8 @@ CAIXA_EQUIPE = {"id": 7, "tamanho": 2, "baia": 2, "zona": "B", "status": "EM_AND
 
 class TestMapaSvg(unittest.TestCase):
     def test_fundo_e_vivo_validos_e_do_mesmo_tamanho(self):
-        st = status(EQUIPE + [robo(2, 39, 15, "DEFEITO"), robo(3, 45, 28, "RECARREGANDO")],
-                    [CAIXA_EQUIPE], livres=(3, 1, 1))
+        st = status(EQUIPE + [robo(2, 39, 15, "DEFEITO"), robo(3, 37, 28, "RECARREGANDO")],
+                    [CAIXA_EQUIPE], livres=(4, 1, 1, 0))
         fundo = ET.fromstring(mapa_svg.svg_fundo(MAPA, fonte_base64="AAAA"))
         vivo = ET.fromstring(mapa_svg.svg_vivo(MAPA, st, selecionado=0, agora=12.3))
         self.assertEqual(fundo.get("width"), vivo.get("width"))
@@ -55,13 +50,53 @@ class TestMapaSvg(unittest.TestCase):
         ET.fromstring(mapa_svg.svg_vivo(MAPA, None))
 
     def test_semaforo_e_placa_com_a_ocupacao(self):
-        svg = mapa_svg.svg_vivo(MAPA, status([], livres=(1, 2, 0)))
-        self.assertIn("P1  2/3", svg)
+        svg = mapa_svg.svg_vivo(MAPA, status([], livres=(1, 2, 0, 3)))
+        self.assertIn("P1  3/4", svg)
         self.assertIn("P2  0/2", svg)
         self.assertIn("P3  1/1", svg)
+        self.assertIn("P4  0/3", svg)
         self.assertEqual(mapa_svg.cor_ocupacao(0, 3), "verde")
         self.assertEqual(mapa_svg.cor_ocupacao(2, 3), "amarelo")
         self.assertEqual(mapa_svg.cor_ocupacao(3, 3), "vermelho")
+
+    def test_passagens_com_rotulo_da_capacidade(self):
+        fundo = mapa_svg.svg_fundo(MAPA)
+        for pas in MAPA["passagens"]:
+            self.assertIn(f"{pas['nome']} (cap {pas['capacidade']})", fundo)
+        self.assertIn("P3 (cap 1)", fundo)        # semente 42: P3 é a de capacidade 1
+
+    def test_paredes_e_obstaculos_vem_do_json(self):
+        fundo = ET.fromstring(mapa_svg.svg_fundo(MAPA))
+        grupos = [g.get("class") for g in fundo.iter("{http://www.w3.org/2000/svg}g")]
+        self.assertEqual(grupos.count("obstaculo"), len(MAPA["obstaculos"]))
+        self.assertEqual(grupos.count("parede"), len(MAPA["paredes"]))
+        # outro mapa (outra semente): o desenho muda junto, nada é fixo no Python
+        outro = dict(MAPA, obstaculos=MAPA["obstaculos"][:3], paredes=MAPA["paredes"][:2])
+        grupos = [g.get("class") for g in ET.fromstring(mapa_svg.svg_fundo(outro))
+                  .iter("{http://www.w3.org/2000/svg}g")]
+        self.assertEqual(grupos.count("obstaculo"), 3)
+        self.assertEqual(grupos.count("parede"), 2)
+
+    def test_tunel_e_regiao_da_passagem(self):
+        pas = MAPA["passagens"][0]
+        x1, x2, y = mapa_svg.tunel(pas)
+        self.assertEqual(x2 - x1 + 1, 4)                         # atravessa a parede (4 colunas)
+        self.assertEqual(len(pas["regiao"]), len(pas["celulas"]) + 2)   # + uma boca de cada lado
+        self.assertTrue(all(c[1] == y for c in pas["regiao"]))
+
+    def test_corredor_nao_atravessa_paredes(self):
+        trechos = mapa_svg._faixas_do_corredor(MAPA)
+        paredes = {x for r in MAPA["paredes"] if r["y1"] <= MAPA["corredor_y"] <= r["y2"]
+                   for x in range(r["x1"], r["x2"] + 1)}
+        for x1, x2 in trechos:
+            self.assertFalse(paredes & set(range(x1, x2 + 1)))
+        self.assertEqual(len(trechos), 4)                        # 3 paredes cortam em 4 trechos
+
+    def test_cancela_fecha_quando_a_passagem_enche(self):
+        aberta = mapa_svg._todas_as_cancelas(MAPA, status([], livres=(4, 2, 1, 3)), fechadas=True)
+        cheia = mapa_svg._todas_as_cancelas(MAPA, status([], livres=(4, 2, 0, 3)), fechadas=True)
+        self.assertEqual(aberta, [])
+        self.assertTrue(cheia)                                   # só a P3 (cap 1) está cheia
 
     def test_regiao_da_baia_nao_invade_o_corredor(self):
         for b in MAPA["baias"]:

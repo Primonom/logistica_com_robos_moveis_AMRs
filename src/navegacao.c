@@ -10,9 +10,13 @@
  *      Organizador porque alguém da equipe está em DEFEITO): só mantém o
  *      setpoint na posição atual;
  *   4) senão: se a Status pediu recarga, vai para a estação; se é SEGUIDOR
- *      num transporte, só copia o setpoint do líder; senão inicia a rota
- *      pendente (se houver) e segue a rota, escrevendo o setpoint
- *      (o_sp_posicao_x/y) do waypoint atual.
+ *      num transporte, dá um passo em direção ao líder; senão calcula o
+ *      caminho pendente (se houver) e segue o caminho.
+ *
+ * Caminho: calculado com A* (calcular_caminho, mapa.c) = lista de CÉLULAS.
+ * O robô anda UMA célula por vez: o setpoint (o_sp_posicao_x/y) é sempre a
+ * próxima célula do caminho. Como ela é vizinha, o simulador (que anda
+ * primeiro em x, depois em y) nunca corta o canto de um obstáculo.
  *
  * Estados (decididos aqui e publicados pela Status em e_estado):
  *   GOTO           (só em MANUAL)  MANUAL durante e ao chegar
@@ -25,32 +29,45 @@
  *   Enquanto o robô está em DEFEITO, uma mudança de estado pedida aqui é
  *   guardada em estado_antes (vale quando o defeito sair).
  *
- * Transporte em equipe: a equipe é uma unidade. Só o LÍDER (menor id)
- * calcula a rota e usa os semáforos das passagens. Os SEGUIDORES não fazem
- * sem_wait/sem_post: copiam o setpoint publicado pelo líder no buffer de
- * status dele (j_sp_posicao_x/y). Assim a equipe ocupa 1 vaga na passagem.
+ * Passagens (região = túnel + 1 boca de cada lado, ver mapa.h):
+ *   - quando a PRÓXIMA célula é da passagem p e a atual não, pede o
+ *     semáforo de p ANTES de mandar o robô entrar (sem vaga: fica parado);
+ *   - quando o robô chega numa célula fora da região de p, devolve o
+ *     semáforo (sem_post);
+ *   - um robô nunca segura duas passagens: as regiões ficam separadas por
+ *     mais de 1 célula (mapa.c), então ele sempre passa por uma célula
+ *     livre (e libera p) antes de chegar à próxima. Se ainda segura p (a
+ *     equipe não saiu), ele NÃO pede outra: espera. Isso quebra a
+ *     condição "segura e espera" e evita deadlock;
+ *   - esperando mais de 3 s na porta: recalcula o A* a partir de onde
+ *     está. Com o custo dinâmico (passagem cheia custa mais) ele pode
+ *     escolher outra passagem. Evento "replanejou rota: passagem Pn cheia".
  *
- * Passagens estreitas: antes de seguir para um waypoint marcado com uma
- * passagem, pega o semáforo dela; ao chegar nesse waypoint (já fora da
- * passagem), devolve. Um robô nunca segura duas passagens ao mesmo tempo,
- * o que quebra a condição "segura e espera" e evita deadlock.
+ * Transporte em equipe: a equipe é uma unidade. Só o LÍDER calcula o
+ * caminho até a zona e usa os semáforos. Cada SEGUIDOR calcula, a cada
+ * ciclo, o A* até a posição atual do líder (buffer de status dele) e dá o
+ * primeiro passo; não faz sem_wait/sem_post (a equipe ocupa 1 vaga). O
+ * líder recebe a lista de membros no IR_ZONA e só devolve uma passagem
+ * quando ele E todos os membros já saíram da região dela.
  *
  * Sincronização:
  *   - fila de mensagens /atr_robo_<id>: recebe comandos de outro processo
  *     (Console/Organizador) sem memória compartilhada nem mutex extra.
  *   - semáforos contadores nomeados /atr_passagem_<n> (valor inicial =
- *     capacidade): limitam quantos robôs ficam dentro de cada passagem.
- *     sem_timedwait com prazo curto: se a passagem está cheia, o robô
- *     desiste NESTE ciclo e tenta de novo no próximo; assim a thread não
- *     fica presa e continua lendo mensagens (e, no passo 7, falhas).
+ *     capacidade sorteada): limitam quantos robôs ficam dentro de cada
+ *     passagem. sem_timedwait com prazo curto: se a passagem está cheia, o
+ *     robô desiste NESTE ciclo e tenta de novo no próximo; assim a thread
+ *     não fica presa e continua lendo mensagens e a flag "parar".
  *   - mutex do robô (PROCESS_SHARED): lê a posição e escreve o setpoint
  *     enquanto o simulador (outro processo) também usa o hw.
- *   - mutex do robô LÍDER (seguidor): lê o j_sp do líder sem pegar a
- *     Status dele no meio de uma atualização. Os dois mutexes (líder e o
- *     meu) nunca ficam travados ao mesmo tempo: sem risco de deadlock.
+ *   - mutex de OUTRO robô (líder, para o seguidor; membros, para o líder):
+ *     lê só o buffer de status dele (e_posicao, destino). Nunca junto com o
+ *     meu mutex: copia para variáveis locais e solta antes do próximo lock
+ *     (regra anti-deadlock do projeto).
  *   - estado_local.mutex: troca de informação com a Status (outra thread):
- *     estado e destino da rota (que a Status publica no buffer), e as flags
- *     parar e ir_recarregar que a Status liga.
+ *     estado, destino e cantos do caminho (que a Status publica no
+ *     buffer), e as flags parar e ir_recarregar que a Status liga.
+ *   - mem->mapa: só leitura, sem mutex (ver mapa.h).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,37 +78,39 @@
 #include "comum.h"
 #include "mapa.h"
 
-#define ESPERA_SEMAFORO_MS 10  /* prazo do sem_timedwait em cada ciclo */
+#define ESPERA_SEMAFORO_MS  10  /* prazo do sem_timedwait em cada ciclo */
+#define REPLANEJAR_APOS_S    3  /* espera na porta antes de recalcular o A* */
 
 static mqd_t fila;                      /* /atr_robo_<id> (só leitura) */
-static sem_t *semaforos[N_PASSAGENS];   /* /atr_passagem_1..3 */
 
 /* Variáveis usadas só por esta thread (não precisam de mutex). */
-static Rota rota;
-static int  indice = 0;            /* waypoint atual (rota.n = sem rota) */
+static Caminho caminho;
+static int  indice = 0;            /* próxima célula do caminho (caminho.n = sem caminho) */
 static int  passagem_atual = -1;   /* passagem que estou segurando */
 static bool avisou_espera = false; /* já registrou "esperando passagem"? */
-static bool tem_destino = false;   /* há destino ainda não iniciado? */
-static int  destino_x, destino_y;
-static Estado estado_ao_chegar = DISPONIVEL; /* estado quando a rota acabar */
+static struct timespec espera_desde; /* quando começou a esperar (CLOCK_MONOTONIC) */
+static bool tem_destino = false;   /* há destino com caminho ainda não calculado? */
+static int  destino_x, destino_y;  /* destino atual (vale também no replanejamento) */
+static Estado estado_ao_chegar = DISPONIVEL; /* estado quando o caminho acabar */
 static bool acoplando = false;     /* mandou erguer; espera confirmação */
 static int  lider = -1;            /* >= 0: sou seguidor deste líder */
 static bool pausado = false;       /* PAUSAR do Organizador (equipe parada) */
+/* Só no líder durante o transporte: os outros membros da equipe e se cada
+ * um já foi VISTO dentro da passagem que o líder segura.
+ * POR QUE: o líder só faz sem_post quando a equipe inteira saiu; como o
+ * buffer de status dos membros tem atraso, "fora" só vale depois de ter
+ * sido visto "dentro" (senão um seguidor recém-entrado contaria como fora). */
+static int  n_membros = 0;
+static int  membros[TAMANHO_MAX_CAIXA];
+static bool visto_dentro[TAMANHO_MAX_CAIXA];
 
-static void abrir_ipc(void)
+static void abrir_fila(void)
 {
     char nome[32];
-    int i;
 
     snprintf(nome, sizeof(nome), "%s%d", PREFIXO_FILA_ROBO, id_robo);
     fila = mq_open(nome, O_RDONLY);
     if (fila == (mqd_t)-1) { perror("mq_open robo"); exit(1); }
-
-    for (i = 0; i < N_PASSAGENS; i++) {
-        snprintf(nome, sizeof(nome), "%s%d", PREFIXO_SEM_PASSAGEM, i + 1);
-        semaforos[i] = sem_open(nome, 0);
-        if (semaforos[i] == SEM_FAILED) { perror("sem_open"); exit(1); }
-    }
 }
 
 /* Muda o estado. Se o robô está em DEFEITO, não apaga o DEFEITO: guarda
@@ -117,8 +136,8 @@ static Estado ler_estado(void)
     return e;
 }
 
-/* Informa à Status o fim da rota atual (-1, -1 = sem rota), para ela
- * publicar no buffer de status (a tela desenha a linha até lá). */
+/* Informa à Status o fim do caminho atual (-1, -1 = sem caminho), para ela
+ * publicar no buffer de status (a tela desenha a bandeirinha lá). */
 static void publicar_destino(int x, int y)
 {
     pthread_mutex_lock(&estado_local.mutex);
@@ -127,17 +146,27 @@ static void publicar_destino(int x, int y)
     pthread_mutex_unlock(&estado_local.mutex);
 }
 
-/* Informa à Status os PRÓXIMOS waypoints da rota (a partir do atual, no
- * máximo MAX_ROTA_STATUS), para ela publicar no buffer (a tela desenha o
- * caminho). Sem rota: n_rota = 0. */
+/* A célula k do caminho é um "canto" (a direção muda nela)? */
+static bool canto(int k)
+{
+    return caminho.x[k] - caminho.x[k - 1] != caminho.x[k + 1] - caminho.x[k] ||
+           caminho.y[k] - caminho.y[k - 1] != caminho.y[k + 1] - caminho.y[k];
+}
+
+/* Informa à Status só os CANTOS do caminho que falta (e o destino), no
+ * máximo MAX_ROTA_STATUS: a tela liga os pontos com retas. Sem caminho:
+ * n_rota = 0. */
 static void publicar_rota(void)
 {
     int k, n = 0;
 
     pthread_mutex_lock(&estado_local.mutex);
-    for (k = indice; k < rota.n && n < MAX_ROTA_STATUS; k++, n++) {
-        estado_local.rota_x[n] = rota.pontos[k].x;
-        estado_local.rota_y[n] = rota.pontos[k].y;
+    for (k = indice; k < caminho.n && n < MAX_ROTA_STATUS; k++) {
+        if (k == caminho.n - 1 || (k > 0 && canto(k))) {
+            estado_local.rota_x[n] = caminho.x[k];
+            estado_local.rota_y[n] = caminho.y[k];
+            n++;
+        }
     }
     estado_local.n_rota = n;
     pthread_mutex_unlock(&estado_local.mutex);
@@ -160,7 +189,33 @@ static void definir_modo(bool automatico)
     pthread_mutex_unlock(&mem->robos[id_robo].mutex);
 }
 
-/* Guarda um destino; a rota começa em iniciar_rota_pendente(). */
+/* Posição atual do MEU robô (hw: este processo é o robô). */
+static void ler_posicao(int *x, int *y)
+{
+    pthread_mutex_lock(&mem->robos[id_robo].mutex);
+    *x = mem->robos[id_robo].hw.i_posicao_x;
+    *y = mem->robos[id_robo].hw.i_posicao_y;
+    pthread_mutex_unlock(&mem->robos[id_robo].mutex);
+}
+
+static void escrever_setpoint(int x, int y)
+{
+    pthread_mutex_lock(&mem->robos[id_robo].mutex);
+    mem->robos[id_robo].hw.o_sp_posicao_x = x;
+    mem->robos[id_robo].hw.o_sp_posicao_y = y;
+    pthread_mutex_unlock(&mem->robos[id_robo].mutex);
+}
+
+/* Posição de outro robô, pelo BUFFER DE STATUS dele (nunca o hw). */
+static void posicao_de(int id, int *x, int *y)
+{
+    pthread_mutex_lock(&mem->robos[id].mutex);
+    *x = mem->robos[id].e_posicao_x;
+    *y = mem->robos[id].e_posicao_y;
+    pthread_mutex_unlock(&mem->robos[id].mutex);
+}
+
+/* Guarda um destino; o caminho é calculado em calcular_pendente(). */
 static void novo_destino(int x, int y, Estado durante, Estado ao_chegar)
 {
     tem_destino = true;
@@ -177,6 +232,17 @@ static void evento(const char *formato, int valor)
 
     snprintf(texto, sizeof(texto), formato, valor);
     registrar_evento(fila_coletor, id_robo, texto);
+}
+
+/* IR_ZONA para o líder: guarda os OUTROS membros da equipe. */
+static void guardar_membros(const MensagemRobo *m)
+{
+    int k;
+
+    n_membros = 0;
+    for (k = 0; k < m->n_membros; k++)
+        if (m->membros[k] != id_robo)
+            membros[n_membros++] = m->membros[k];
 }
 
 /* Trata uma mensagem recebida. */
@@ -219,6 +285,7 @@ static void tratar_mensagem(const MensagemRobo *m)
         break;
     case IR_ZONA:
         if (m->lider_id == id_robo) {
+            guardar_membros(m);
             novo_destino(m->x, m->y, OPERANDO_CARGA, OPERANDO_CARGA);
         } else {
             lider = m->lider_id;
@@ -237,11 +304,12 @@ static void tratar_mensagem(const MensagemRobo *m)
         comandar_garra(false);
         pausado = false;
         lider = -1;
-        rota.n = 0;
+        n_membros = 0;
+        caminho.n = 0;
         indice = 0;
         tem_destino = false;
         publicar_destino(-1, -1);
-        publicar_rota();          /* rota.n = 0: rota vazia */
+        publicar_rota();          /* caminho.n = 0: rota vazia */
         definir_estado(DISPONIVEL);
         registrar_evento(fila_coletor, id_robo, "carga solta");
         break;
@@ -285,46 +353,90 @@ static void verificar_acoplamento(void)
     }
 }
 
-/* 3a) Seguidor: copia o setpoint do líder (lido do buffer de status dele).
- * Não usa semáforos: quem ocupa a vaga na passagem é o líder. O destino
+/* 4a) Seguidor: A* da minha posição até a posição ATUAL do líder (lida do
+ * buffer de status dele) e um passo só, para a 1ª célula do caminho. Não
+ * usa semáforos: quem ocupa a vaga na passagem é o líder. O destino
  * publicado é o do líder (a equipe vai para o mesmo lugar). */
 static void seguir_lider(void)
 {
-    int x, y, dx, dy;
+    Caminho c;
+    int lx, ly, dx, dy, x, y;
 
     pthread_mutex_lock(&mem->robos[lider].mutex);
-    x = mem->robos[lider].j_sp_posicao_x;
-    y = mem->robos[lider].j_sp_posicao_y;
+    lx = mem->robos[lider].e_posicao_x;
+    ly = mem->robos[lider].e_posicao_y;
     dx = mem->robos[lider].destino_x;
     dy = mem->robos[lider].destino_y;
     pthread_mutex_unlock(&mem->robos[lider].mutex);
     publicar_destino(dx, dy);
 
-    pthread_mutex_lock(&mem->robos[id_robo].mutex);
-    mem->robos[id_robo].hw.o_sp_posicao_x = x;
-    mem->robos[id_robo].hw.o_sp_posicao_y = y;
-    pthread_mutex_unlock(&mem->robos[id_robo].mutex);
+    ler_posicao(&x, &y);
+    if (calcular_caminho(x, y, lx, ly, &c) && c.n >= 2)
+        escrever_setpoint(c.x[1], c.y[1]);
+    else
+        escrever_setpoint(x, y);   /* já está com o líder (ou sem caminho) */
 }
 
-/* 3b) Começa a rota pendente. Só se não estiver dentro de uma passagem:
- * a rota nova parte da posição atual, que precisa ser fora delas. */
-static void iniciar_rota_pendente(void)
+/* Calcula o caminho de (x, y) até o destino atual. caminho.x[0] é a
+ * própria posição: com indice = 0 o próximo ciclo já "chega" nela e passa
+ * para a célula seguinte (e um caminho de 1 célula = já está no destino). */
+static void planejar(int x, int y)
 {
-    Robo *r = &mem->robos[id_robo];
+    indice = 0;
+    if (!calcular_caminho(x, y, destino_x, destino_y, &caminho)) {
+        caminho.n = 0;
+        publicar_destino(-1, -1);
+        registrar_evento(fila_coletor, id_robo, "sem caminho ate o destino");
+    } else {
+        publicar_destino(destino_x, destino_y);
+    }
+    publicar_rota();
+}
+
+/* 4b) Calcula o caminho do destino pendente. Só fora de passagem: senão o
+ * robô poderia sair por outro lado segurando o semáforo errado. */
+static void calcular_pendente(void)
+{
     int x, y;
 
     if (!tem_destino || passagem_atual != -1)
         return;
-    pthread_mutex_lock(&r->mutex);
-    x = r->hw.i_posicao_x;
-    y = r->hw.i_posicao_y;
-    pthread_mutex_unlock(&r->mutex);
-
-    calcular_rota(x, y, destino_x, destino_y, &rota);
-    indice = 0;
     tem_destino = false;
-    publicar_destino(destino_x, destino_y);
-    publicar_rota();
+    ler_posicao(&x, &y);
+    planejar(x, y);
+}
+
+/* Todos os membros da equipe já saíram da passagem p? Um membro só conta
+ * como "saiu" depois de ter sido VISTO dentro dela: o buffer de status tem
+ * até 200 ms de atraso, e um seguidor que acabou de entrar ainda pode
+ * aparecer do lado de fora (antes da boca). Um mutex por vez. */
+static bool equipe_saiu(int p)
+{
+    int k, x, y;
+    bool saiu = true;
+
+    for (k = 0; k < n_membros; k++) {
+        posicao_de(membros[k], &x, &y);
+        if (passagem_em(x, y) == p) {
+            visto_dentro[k] = true;
+            saiu = false;
+        } else if (!visto_dentro[k]) {
+            saiu = false;   /* ainda não entrou */
+        }
+    }
+    return saiu;
+}
+
+/* Devolve a passagem quando eu (em (x, y)) e a equipe já saímos dela. */
+static void liberar_se_saiu(int x, int y)
+{
+    int p = passagem_atual;
+
+    if (p == -1 || passagem_em(x, y) == p || !equipe_saiu(p))
+        return;
+    sem_post(sem_passagem[p]);
+    passagem_atual = -1;
+    evento("saiu da passagem P%d", p + 1);
 }
 
 /* Tenta pegar o semáforo da passagem p, esperando no máximo
@@ -332,61 +444,78 @@ static void iniciar_rota_pendente(void)
 static bool tentar_entrar(int p)
 {
     struct timespec prazo;
+    int k;
 
     clock_gettime(CLOCK_REALTIME, &prazo); /* sem_timedwait usa REALTIME */
     somar_ms(&prazo, ESPERA_SEMAFORO_MS);
-    if (sem_timedwait(semaforos[p], &prazo) == -1) {
+    if (sem_timedwait(sem_passagem[p], &prazo) == -1) {
         if (errno != ETIMEDOUT && errno != EINTR) { perror("sem_timedwait"); exit(1); }
         if (!avisou_espera) {
             evento("esperando passagem P%d", p + 1);
             avisou_espera = true;
+            clock_gettime(CLOCK_MONOTONIC, &espera_desde);
         }
         return false;
     }
     passagem_atual = p;
     avisou_espera = false;
+    for (k = 0; k < n_membros; k++)
+        visto_dentro[k] = false;
     evento("entrou na passagem P%d", p + 1);
     return true;
 }
 
-/* 3c) Segue a rota: um passo de controle por ciclo. */
-static void seguir_rota(void)
+/* Esperando a passagem p há mais de REPLANEJAR_APOS_S: recalcula o A* a
+ * partir de (x, y). O custo dinâmico (3 por robô dentro de p) pode fazer o
+ * caminho novo usar outra passagem; se não houver opção melhor, sai o
+ * mesmo caminho e o robô continua esperando (e replaneja de novo depois). */
+static void talvez_replanejar(int p, int x, int y)
 {
-    Robo *r = &mem->robos[id_robo];
-    Waypoint w;
-    bool chegou;
+    struct timespec agora;
 
-    if (indice >= rota.n)
-        return; /* sem rota */
-    w = rota.pontos[indice];
-
-    /* Precisa de uma passagem que ainda não segura? Pede o semáforo antes
-     * de mandar o robô entrar. Sem vaga: fica parado (setpoint antigo). */
-    if (w.passagem != -1 && passagem_atual != w.passagem && !tentar_entrar(w.passagem))
+    clock_gettime(CLOCK_MONOTONIC, &agora);
+    if (agora.tv_sec - espera_desde.tv_sec < REPLANEJAR_APOS_S ||
+        (agora.tv_sec - espera_desde.tv_sec == REPLANEJAR_APOS_S &&
+         agora.tv_nsec < espera_desde.tv_nsec))
         return;
+    evento("replanejou rota: passagem P%d cheia", p + 1);
+    avisou_espera = false;   /* uma espera nova recomeça a contagem */
+    planejar(x, y);
+}
 
-    pthread_mutex_lock(&r->mutex);
-    chegou = (r->hw.i_posicao_x == w.x && r->hw.i_posicao_y == w.y);
-    if (!chegou) {
-        r->hw.o_sp_posicao_x = w.x;
-        r->hw.o_sp_posicao_y = w.y;
-    }
-    pthread_mutex_unlock(&r->mutex);
+/* 4c) Segue o caminho: no máximo uma célula por ciclo. */
+static void seguir_caminho(void)
+{
+    int x, y, p;
 
-    if (!chegou)
-        return;
-    if (w.passagem != -1) { /* chegou ao ponto depois da passagem: libera */
-        sem_post(semaforos[w.passagem]);
-        passagem_atual = -1;
-        evento("saiu da passagem P%d", w.passagem + 1);
+    ler_posicao(&x, &y);
+    liberar_se_saiu(x, y);
+    if (indice >= caminho.n)
+        return; /* sem caminho */
+
+    /* Chegou na célula do setpoint? Passa para a próxima. */
+    if (x == caminho.x[indice] && y == caminho.y[indice]) {
+        indice++;
+        publicar_rota();              /* uma célula a menos */
+        if (indice == caminho.n) {
+            publicar_destino(-1, -1);
+            definir_estado(estado_ao_chegar);
+            registrar_evento(fila_coletor, id_robo, "chegou ao destino");
+            return;
+        }
     }
-    indice++;
-    publicar_rota();              /* um waypoint a menos */
-    if (indice == rota.n) {
-        publicar_destino(-1, -1);
-        definir_estado(estado_ao_chegar);
-        registrar_evento(fila_coletor, id_robo, "chegou ao destino");
+
+    /* A próxima célula é de uma passagem que ainda não seguro? */
+    p = passagem_em(caminho.x[indice], caminho.y[indice]);
+    if (p != -1 && p != passagem_atual) {
+        if (passagem_atual != -1)
+            return;   /* ainda seguro outra (equipe saindo): nunca duas */
+        if (!tentar_entrar(p)) {
+            talvez_replanejar(p, x, y);
+            return;   /* sem vaga: fica parado (setpoint = posição atual) */
+        }
     }
+    escrever_setpoint(caminho.x[indice], caminho.y[indice]);
 }
 
 /* 3) Deve ficar parado? (DEFEITO, pela flag da Status, ou PAUSAR.) */
@@ -401,17 +530,15 @@ static bool deve_parar(void)
 }
 
 /* 3) Parado: o setpoint vira a posição atual (o robô não anda).
- * A rota e a passagem que ele segura NÃO são liberadas: um robô parado
+ * O caminho e a passagem que ele segura NÃO são liberados: um robô parado
  * dentro de uma passagem continua ocupando a vaga, porque fisicamente ele
  * está bloqueando o caminho. Os outros esperam no semáforo. */
 static void segurar_posicao(void)
 {
-    Robo *r = &mem->robos[id_robo];
+    int x, y;
 
-    pthread_mutex_lock(&r->mutex);
-    r->hw.o_sp_posicao_x = r->hw.i_posicao_x;
-    r->hw.o_sp_posicao_y = r->hw.i_posicao_y;
-    pthread_mutex_unlock(&r->mutex);
+    ler_posicao(&x, &y);
+    escrever_setpoint(x, y);
 }
 
 /* 4) A Status pediu recarga? Vai para a estação que ela escolheu. */
@@ -436,8 +563,8 @@ void *tarefa_navegacao(void *arg)
     struct timespec proximo;
 
     (void)arg;
-    abrir_ipc();
-    rota.n = 0;
+    abrir_fila();
+    caminho.n = 0;
 
     clock_gettime(CLOCK_MONOTONIC, &proximo);
     while (!atomic_load(&mem->encerrar)) {
@@ -450,8 +577,8 @@ void *tarefa_navegacao(void *arg)
             if (lider >= 0) {
                 seguir_lider();
             } else {
-                iniciar_rota_pendente();
-                seguir_rota();
+                calcular_pendente();
+                seguir_caminho();
             }
         }
 

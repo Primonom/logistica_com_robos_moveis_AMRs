@@ -1,5 +1,6 @@
 """
-cabecalho.py — Faixa do topo: conexão, relógio do sistema e contadores.
+cabecalho.py — Faixa do topo: conexão, semente do mapa, relógio do sistema
+e contadores.
 
 Só desenha (não guarda estado). __init__ cria os componentes uma vez;
 atualizar(dados) é chamado pelo ui.timer com uma CÓPIA do estado
@@ -29,6 +30,8 @@ class Cabecalho:
                     ui.label("Logística com AMRs").classes("titulo")
                     ui.label("Tela de Operação · ATR 2026/2").classes("subtitulo")
             with ui.row().classes("items-center gap-4 no-wrap"):
+                # o mapa é sorteado a cada execução do C: a semente identifica qual é
+                self.semente = ui.label("Mapa: –").classes("pilula")
                 self.broker = ui.label().classes("pilula")
                 self.sistema = ui.label().classes("pilula")
                 with ui.column().classes("gap-0 items-end"):
@@ -60,6 +63,8 @@ class Cabecalho:
 
     def atualizar(self, dados):
         self._conexao(dados["broker_conectado"], dados["sistema_online"])
+        if dados["mapa"] is not None:
+            self.semente.set_text(f"Mapa: semente {dados['mapa']['semente']}")
         status = dados["status"]
         if status is None:
             return

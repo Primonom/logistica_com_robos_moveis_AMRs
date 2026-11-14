@@ -8,7 +8,7 @@
  *      liga a flag "parar" (a Navegação segura a posição). Quando o defeito
  *      some, volta ao estado de antes e desliga "parar";
  *   3) BATERIA: robô DISPONIVEL, sem carga e com bateria < 20% -> liga
- *      "ir_recarregar" (com a estação mais próxima) e muda para
+ *      "ir_recarregar" (com a estação de menor caminho A*) e muda para
  *      RECARREGANDO. Na estação, com 100%, volta para DISPONIVEL;
  *   4) copia o hw para o BUFFER DE STATUS (e_posicao_x/y, j_sp_posicao_x/y,
  *      bateria, e_estado, distancia_total, destino_x/y, rota) e soma a
@@ -29,6 +29,10 @@
  *   - Os dois mutexes nunca são segurados ao mesmo tempo: não há risco de
  *     deadlock por ordem de travamento.
  *   - clock_nanosleep com tempo absoluto para o período (ver somar_ms).
+ *   - estacao_mais_proxima usa o A* (mapa.c), que pode rodar ao mesmo
+ *     tempo que o da Navegação: não tem problema, os vetores do A* são
+ *     locais de cada chamada. É chamada com estado_local.mutex travado
+ *     (só no ciclo em que a bateria fica baixa; leva poucos ms).
  */
 #include <stdio.h>
 #include <stdlib.h>

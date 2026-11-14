@@ -1,0 +1,17 @@
+2026-11-14 16:59:37.624;-1;sistema iniciado
+2026-11-14 16:59:37.624;-1;mapa gerado com semente 5
+2026-11-14 16:59:37.636;0;robo criado (pid 8171) em (9,20)
+2026-11-14 16:59:37.637;1;robo criado (pid 8172) em (7,20)
+2026-11-14 16:59:37.640;0;robo vivo
+2026-11-14 16:59:37.641;1;robo vivo
+2026-11-14 16:59:37.741;0;modo manual
+2026-11-14 16:59:37.742;1;modo manual
+2026-11-14 16:59:38.128;-1;2 robo(s) novo(s) na frota
+2026-11-14 16:59:38.141;0;entrou na passagem P2
+2026-11-14 16:59:38.352;1;esperando passagem P2
+2026-11-14 16:59:38.441;0;DEFEITO: robo parado
+2026-11-14 16:59:41.352;1;replanejou rota: passagem P2 cheia
+2026-11-14 16:59:42.242;1;entrou na passagem P1
+2026-11-14 16:59:42.942;1;saiu da passagem P1
+2026-11-14 16:59:43.442;1;chegou ao destino
+2026-11-14 16:59:50.628;-1;sistema encerrado

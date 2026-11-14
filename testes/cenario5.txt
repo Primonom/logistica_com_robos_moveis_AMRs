@@ -1,0 +1,15 @@
+# Cenário 5: o mapa muda a cada execução (semente diferente = mapa
+# diferente). O rodar_todos.sh roda este arquivo DUAS vezes, com
+# ATR_SEMENTE=1 e ATR_SEMENTE=2 (saídas cenario5_semente1 e _semente2).
+# Esperado: o "mapa" mostra paredes iguais, mas passagens (posição e
+# capacidade) e obstáculos diferentes; nos dois mapas o robô calcula o
+# caminho com A*, leva a caixa da baia 2 até a zona D e solta.
+mapa
+novo
+aguarda 0 DISPONIVEL
+caixa 1 2 D
+aguarda 0 OPERANDO_CARGA
+status
+aguarda 0 DISPONIVEL 90
+status
+sair

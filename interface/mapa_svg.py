@@ -4,9 +4,10 @@ mapa_svg.py — Mapa do galpão em estilo cartoon (docs/plano_mapa_cartoon.md).
 Duas camadas, cada uma gerada por uma função PURA (recebe dicionários,
 devolve texto SVG; não usa a interface — ver testes/test_mapa_svg.py), com
 os desenhos ("carimbos") de desenhos.py:
-  svg_fundo(mapa, fonte)               gerado uma vez: piso, paredes, pilares,
-                                       porta, corredor, baias, zonas,
-                                       estações, passagens, decoração, régua.
+  svg_fundo(mapa, fonte)               gerado uma vez por mapa: piso, paredes
+                                       internas, obstáculos, passagens (com o
+                                       rótulo "P1 (cap 3)"), corredor, baias,
+                                       zonas, estações, decoração, régua.
   svg_vivo(mapa, status, selecionado, direcoes, agora)
                                        a cada atualização: semáforos e
                                        cancelas das passagens, luzes das
@@ -18,7 +19,9 @@ os desenhos ("carimbos") de desenhos.py:
 Coordenadas: o piso começa em (MARGEM, MARGEM); a célula (x, y) ocupa o
 quadrado de CELULA px a partir de (MARGEM + x*CELULA, MARGEM + y*CELULA).
 A margem guarda as paredes, a régua, as placas das baias e a rosa dos ventos.
-Todas as posições do galpão vêm do atr/mapa (fonte única: mapa.h no C).
+Todas as posições do galpão vêm do atr/mapa (fonte única: mem->mapa e mapa.h
+no C). O mapa é SORTEADO a cada execução do C (paredes com passagens em
+lugares diferentes, obstáculos aleatórios), por isso nada aqui é fixo.
 """
 import math
 
@@ -91,11 +94,12 @@ def svg_fundo(mapa, fonte_base64=None):
         p.append('<style>@font-face { font-family: "Fredoka"; font-weight: 300 700; '
                  f'src: url(data:font/woff2;base64,{fonte_base64}) format("woff2"); }}</style>')
     p += _moldura_e_piso(mapa)
-    p += _zona_de_transporte(mapa)
     p += _baias(mapa)
     p += _zonas(mapa)
-    p += _passagens(mapa)
     p += _corredor_e_acessos(mapa)
+    p += _paredes_internas(mapa)
+    p += _passagens(mapa)
+    p += _obstaculos(mapa)
     p += _estacoes(mapa)
     p += _decoracao(mapa)
     p += _paredes(mapa)
@@ -115,25 +119,6 @@ def _moldura_e_piso(mapa):
             p.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="{cor}" '
                      f'stroke="#d8d1c3" stroke-width="1"/>')
     return p
-
-
-def _zona_de_transporte(mapa):
-    """Área central pintada no chão entre as duas primeiras passagens de
-    coluna inteira (P1 e P2), com "ZONA DE TRANSPORTE AMR" escrito, como na
-    Figura 2. Só decoração (as posições vêm do atr/mapa)."""
-    colunas = [r for pas in mapa["passagens"] for r in pas["retangulos"]
-               if r["y1"] == 0 and r["y2"] == mapa["altura"] - 1]
-    colunas.sort(key=lambda r: r["x1"])
-    if len(colunas) < 2:
-        return []
-    x1, x2 = colunas[0]["x2"] + 1, colunas[1]["x1"] - 1
-    x, y, w, h = ret(x1, 1, x2, mapa["altura"] - 2)
-    cx = x + w / 2
-    cy = px(mapa["corredor_y"]) - 4.5 * CELULA
-    return [f'<rect x="{x + 10}" y="{y}" width="{w - 20}" height="{h}" rx="10" fill="#ddd5c6" '
-            f'opacity="0.55" stroke="white" stroke-width="3" stroke-dasharray="14 10"/>',
-            d.texto(cx, cy, "ZONA DE TRANSPORTE", 30, "#b3a994", 700),
-            d.texto(cx, cy + 36, "AMR", 30, "#b3a994", 700)]
 
 
 def _baias(mapa):
@@ -200,22 +185,81 @@ def _porta_enrolar(largura, y):
             f'stroke="{cores.CONTORNO}" stroke-width="2"/>', ripas]
 
 
-def _passagens(mapa):
-    """Zonas de restrição (exatamente como o código as trata) com listras de
-    advertência amarelo/preto nas bordas compridas."""
+def tunel(pas):
+    """(x1, x2, y) do túnel de uma passagem (as células dentro da parede)."""
+    xs = [x for x, _ in pas["celulas"]]
+    return min(xs), max(xs), pas["celulas"][0][1]
+
+
+def _paredes_internas(mapa):
+    """Paredes de concreto (retângulos do atr/mapa: cada parede já vem
+    cortada pelos túneis das passagens), com juntas de bloco."""
     p = []
-    for pas in mapa["passagens"]:
-        for r in pas["retangulos"]:
-            x, y, w, h = ret(r["x1"], r["y1"], r["x2"], r["y2"])
-            p.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="url(#restricao)"/>')
-            p.append(f'<rect x="{x}" y="{y}" width="5" height="{h}" fill="url(#advertencia)"/>')
-            p.append(f'<rect x="{x + w - 5}" y="{y}" width="5" height="{h}" fill="url(#advertencia)"/>')
+    for r in mapa["paredes"]:
+        x, y, w, h = ret(r["x1"], r["y1"], r["x2"], r["y2"])
+        juntas = "".join(f'<line x1="{x + 4}" y1="{px(c)}" x2="{x + w - 4}" y2="{px(c)}" '
+                         f'stroke="{cores.PILAR}" stroke-width="1.5"/>'
+                         for c in range(r["y1"] + 2, r["y2"] + 1, 2))
+        p.append(f'<g class="parede"><rect x="{x}" y="{y}" width="{w}" height="{h}" rx="4" '
+                 f'fill="{cores.PAREDE}" stroke="{cores.CONTORNO}" stroke-width="2.5"/>{juntas}</g>')
     return p
 
 
+def _obstaculos(mapa):
+    """Cada obstáculo (1 célula) é um bloco de concreto com um X."""
+    p = []
+    for x, y in mapa["obstaculos"]:
+        x0, y0 = px(x) + 2, px(y) + 2
+        t = CELULA - 4
+        p.append(f'<g class="obstaculo">{d.sombra(x0, y0, t, t, 4)}'
+                 f'<rect x="{x0}" y="{y0}" width="{t}" height="{t}" rx="4" fill="#8a8f9c" '
+                 f'stroke="{cores.CONTORNO}" stroke-width="2"/>'
+                 f'<path d="M{x0 + 5} {y0 + 5} L{x0 + t - 5} {y0 + t - 5} M{x0 + t - 5} {y0 + 5} '
+                 f'L{x0 + 5} {y0 + t - 5}" stroke="{cores.PILAR}" stroke-width="2.5" '
+                 f'stroke-linecap="round"/></g>')
+    return p
+
+
+def _passagens(mapa):
+    """Região de restrição (túnel + bocas) listrada, faixas de advertência
+    amarelo/preto nas bordas do túnel e o rótulo "P1 (cap 3)" pintado no
+    chão do túnel."""
+    p = []
+    for pas in mapa["passagens"]:
+        xs = [x for x, _ in pas["regiao"]]
+        x1, x2, ty = tunel(pas)
+        x, y, w, h = ret(min(xs), ty, max(xs), ty)
+        p.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="{cores.PISO}"/>')
+        p.append(f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="url(#restricao)"/>')
+        x, y, w, h = ret(x1, ty, x2, ty)
+        p.append(f'<rect x="{x}" y="{y}" width="{w}" height="4" fill="url(#advertencia)"/>')
+        p.append(f'<rect x="{x}" y="{y + h - 4}" width="{w}" height="4" fill="url(#advertencia)"/>')
+        p.append(d.texto(x + w / 2, y + h / 2 + 0.5, f"{pas['nome']} (cap {pas['capacidade']})", 12,
+                         peso=700, contorno="white"))
+    return p
+
+
+def _faixas_do_corredor(mapa):
+    """Trechos [x1, x2] da linha do corredor que não estão dentro de uma
+    parede (o corredor é interrompido por elas)."""
+    cy = mapa["corredor_y"]
+    bloqueadas = {x for r in mapa["paredes"] if r["y1"] <= cy <= r["y2"]
+                  for x in range(r["x1"], r["x2"] + 1)}
+    trechos, inicio = [], None
+    for x in range(mapa["largura"] + 1):
+        livre = x < mapa["largura"] and x not in bloqueadas
+        if livre and inicio is None:
+            inicio = x
+        elif not livre and inicio is not None:
+            trechos.append((inicio, x - 1))
+            inicio = None
+    return trechos
+
+
 def _corredor_e_acessos(mapa):
-    """Faixa amarela do corredor (com setas brancas e marcas de pneu) e
-    faixas de acesso mais finas ligando baias e zonas ao corredor."""
+    """Faixa amarela do corredor (com setas brancas e marcas de pneu), só
+    entre as paredes, e faixas de acesso mais finas ligando baias e zonas
+    ao corredor."""
     p = []
     cy = mapa["corredor_y"]
     for ponto in mapa["baias"] + mapa["zonas"]:
@@ -223,17 +267,18 @@ def _corredor_e_acessos(mapa):
         x = px(ponto["x"]) + CELULA * 0.2
         p.append(f'<rect x="{x}" y="{px(a)}" width="{CELULA * 0.6}" height="{(b - a) * CELULA}" '
                  f'fill="{cores.FAIXA}" opacity="0.85"/>')
-    x, y, w, h = ret(0, cy, mapa["largura"] - 1, cy)
-    p.append(f'<rect x="{x}" y="{y - 3}" width="{w}" height="{h + 6}" fill="{cores.FAIXA}" '
-             f'stroke="{cores.FAIXA_BORDA}" stroke-width="2"/>')
-    # marcas de pneu bem suaves
-    for dy in (-5, 5):
-        p.append(f'<path d="M{x} {y + h / 2 + dy} Q{x + w / 4} {y + h / 2 + dy - 2} {x + w / 2} '
-                 f'{y + h / 2 + dy} T{x + w} {y + h / 2 + dy}" fill="none" stroke="{cores.CONTORNO}" '
-                 f'stroke-width="2" opacity="0.07"/>')
-    # setas brancas, alternando o sentido (mão dupla)
-    for k, cx in enumerate(range(7, mapa["largura"] - 4, 6)):
-        p.append(_seta(px(cx), y + h / 2, 1 if k % 2 == 0 else -1))
+    for x1, x2 in _faixas_do_corredor(mapa):
+        x, y, w, h = ret(x1, cy, x2, cy)
+        p.append(f'<rect x="{x}" y="{y - 3}" width="{w}" height="{h + 6}" fill="{cores.FAIXA}" '
+                 f'stroke="{cores.FAIXA_BORDA}" stroke-width="2"/>')
+        # marcas de pneu bem suaves
+        for dy in (-5, 5):
+            p.append(f'<path d="M{x} {y + h / 2 + dy} Q{x + w / 4} {y + h / 2 + dy - 2} {x + w / 2} '
+                     f'{y + h / 2 + dy} T{x + w} {y + h / 2 + dy}" fill="none" '
+                     f'stroke="{cores.CONTORNO}" stroke-width="2" opacity="0.07"/>')
+        # setas brancas, alternando o sentido (mão dupla)
+        for k, cx in enumerate(range(x1 + 3, x2 - 1, 6)):
+            p.append(_seta(px(cx), y + h / 2, 1 if k % 2 == 0 else -1))
     return p
 
 
@@ -260,7 +305,7 @@ def _estacoes(mapa):
                  f'fill="none" stroke="{cores.CONTORNO}" stroke-width="2.5"/>')
         p.append(d.usar("carregador", cx + 14, wy, 24, 20))
         ty = cy + (26 if em_cima else -26)
-        p.append(d.texto(cx + 102, ty, "ÁREA DE RECARGA", 14, cores.RECARGA, 700))
+        p.append(d.texto(cx, ty, "ÁREA DE RECARGA", 14, cores.RECARGA, 700, contorno="white"))
     return p
 
 
@@ -393,15 +438,16 @@ def _ocupacao(pas, status):
 
 
 def _semaforos(mapa, status, agora=0.0):
-    """Na porta de cada passagem: semáforo de 3 luzes e a placa
-    "ocupadas/capacidade" (as cancelas vão por último, por cima dos robôs)."""
+    """Em cada passagem: semáforo de 3 luzes e a placa "ocupadas/capacidade"
+    em cima da parede (as cancelas vão por último, por cima dos robôs)."""
     p = []
     for pas in mapa["passagens"]:
         ocupadas, cap, luz = _ocupacao(pas, status)
-        sx, sy, _ = _posicao_semaforo(pas, mapa)
+        sx, sy = _posicao_semaforo(pas, mapa)
         p += _semaforo(sx, sy, luz, agora)
-        # placa centrada ACIMA do semáforo (ao lado ela encostaria na passagem vizinha)
-        p += _placa(sx, sy - 47, f"{pas['nome']}  {ocupadas}/{cap}", luz)
+        # placa ao lado do semáforo, ainda em cima da parede
+        texto = f"{pas['nome']}  {ocupadas}/{cap}"
+        p += _placa(sx + 16 + (14 + 9.2 * len(texto)) / 2, sy, texto, luz)
     return p
 
 
@@ -414,29 +460,18 @@ def _todas_as_cancelas(mapa, status, fechadas):
     for pas in mapa["passagens"]:
         cheia = _ocupacao(pas, status)[2] == "vermelho"
         if cheia == fechadas:
-            for porta in _posicao_semaforo(pas, mapa)[2]:
-                p += _cancelas(porta, mapa, fechada=cheia)
+            p += _cancelas(tunel(pas), fechada=cheia)
     return p
 
 
 def _posicao_semaforo(pas, mapa):
-    """Semáforo logo acima da porta de cima. Portas: P1/P2 = onde o corredor
-    atravessa; P3 = as pontas dos trechos que encostam no corredor."""
-    cy = mapa["corredor_y"]
-    portas = []
-    for r in pas["retangulos"]:
-        if r["y1"] <= cy <= r["y2"]:
-            portas.append(("horizontal", r["x1"], r["x2"], cy))
-        elif r["y2"] < cy:
-            portas.append(("vertical", r["x1"], r["x2"], r["y2"]))
-        else:
-            portas.append(("vertical", r["x1"], r["x2"], r["y1"]))
-    _, x1, x2, y = portas[0]
-    sx = (px(x1) + px(x2 + 1)) / 2
-    sy = px(y) - 40 if portas[0][0] == "horizontal" else px(y) - 10
-    if portas[0][0] == "vertical":
-        sx += CELULA * 1.3            # P3: ao lado da coluna, para não tapar a passagem
-    return sx, sy, portas
+    """Semáforo em cima da parede, logo acima do túnel (ou logo abaixo, se o
+    túnel está tão no alto que não caberia). Fica no lado esquerdo da
+    parede; a placa vai ao lado dele (ver _semaforos)."""
+    x1, _, ty = tunel(pas)
+    sx = px(x1) + 14
+    sy = px(ty) - 34 if ty >= 3 else px(ty + 1) + 34
+    return sx, sy
 
 
 def _semaforo(x, y, luz, agora=0.0):
@@ -470,22 +505,18 @@ def _placa(cx, y, texto, luz):
             d.texto(x + largura / 2, y, texto, 16, peso=700)]
 
 
-def _cancelas(porta, mapa, fechada):
-    """Cancela listrada nas duas entradas da porta: atravessada (fechada)
-    quando a passagem está cheia; levantada (só o poste) quando não."""
-    orient, x1, x2, y = porta
+def _cancelas(tunel_xy, fechada):
+    """Cancela listrada nas duas pontas do túnel (x1..x2, linha y):
+    atravessada (fechada) quando a passagem está cheia; levantada (só o
+    poste) quando não."""
+    x1, x2, y = tunel_xy
     p = []
-    if orient == "horizontal":            # corredor atravessa: entradas à esquerda e à direita
-        entradas = [(px(x1) - 2, px(y) - 5, 0, 1), (px(x2 + 1) + 2, px(y + 1) + 5, 0, -1)]
-    else:                                 # coluna do P3: entrada na ponta
-        yy = px(y) if y < mapa["corredor_y"] else px(y + 1)
-        entradas = [(px(x1) - 5, yy, 1, 0)]
-    for ex, ey, dx, dy in entradas:
-        if fechada:      # braço atravessado na entrada
-            comp = CELULA + 10
-            fim = (ex + dx * comp, ey + dy * comp)
-        else:            # braço levantado: curto, inclinado para fora da faixa
-            fim = (ex - 10 * (dx or 1) + 6 * dy, ey - 10 * (dy or 1) - 6 * dx)
+    entradas = [(px(x1) - 2, px(y) - 5, 1), (px(x2 + 1) + 2, px(y + 1) + 5, -1)]
+    for ex, ey, dy in entradas:
+        if fechada:      # braço atravessado na entrada (de cima a baixo)
+            fim = (ex, ey + dy * (CELULA + 10))
+        else:            # braço levantado: curto, inclinado para fora do túnel
+            fim = (ex - 10 + 6 * dy, ey - 10 * dy)
         p += _braco_cancela((ex, ey), fim)
         p.append(f'<rect x="{ex - 4.5}" y="{ey - 4.5}" width="9" height="9" rx="2" fill="#9aa0ab" '
                  f'stroke="{cores.CONTORNO}" stroke-width="1.8"/>')
@@ -570,7 +601,7 @@ def _entregas(mapa, status):
 
 
 def _rotas(status, selecionado):
-    """Caminho de cada robô pelos waypoints que o C publica ("rota"): no
+    """Caminho de cada robô pelos cantos que o C publica ("rota"): no
     robô selecionado, pontinhos fortes e uma bandeirinha no destino; nos
     outros, pontinhos pequenos e apagados (bem discretos). Seguidores de uma
     equipe carregando não têm rota própria (o C manda rota vazia)."""
@@ -879,6 +910,12 @@ def svg_legenda():
     x += 110
     itens += placa_id(x + 10, 100, 7)
     itens.append(d.texto(x + 28, 100, "id do robô", 14, ancora="start"))
+    x += 120
+    # o mesmo desenho do mapa (célula 0,0), deslocado para ficar centrado em (x, 100)
+    obstaculo = "".join(_obstaculos({"obstaculos": [[0, 0]]}))
+    itens.append(f'<g transform="translate({x - MARGEM - CELULA / 2} {100 - MARGEM - CELULA / 2})">'
+                 f'{obstaculo}</g>')
+    itens.append(d.texto(x + 20, 100, "obstáculo", 14, ancora="start"))
     largura = max(largura, x + 120)
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{largura:.0f}" height="136" '
             f'viewBox="0 0 {largura:.0f} 136">{d.defs()}{"".join(itens)}</svg>')

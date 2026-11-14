@@ -33,10 +33,9 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "comum.h"
+#include "mapa.h"
 
 #define MAX_PEDIDOS 8      /* capacidade da fila circular de pedidos */
-#define POS_INICIAL_X 25   /* posição usada quando o pedido não diz qual */
-#define POS_INICIAL_Y 15
 
 typedef struct { int x, y; } Pedido;
 
@@ -75,8 +74,8 @@ bool pedir_novo_robo(int x, int y)
     pthread_mutex_lock(&mutex_pedidos);
     if (quantidade < MAX_PEDIDOS) {
         int fim = (inicio + quantidade) % MAX_PEDIDOS;
-        pedidos[fim].x = (x < 0) ? POS_INICIAL_X : x;
-        pedidos[fim].y = (y < 0) ? POS_INICIAL_Y : y;
+        pedidos[fim].x = (x < 0) ? POS_PADRAO_X : x;  /* posição padrão: mapa.h */
+        pedidos[fim].y = (y < 0) ? POS_PADRAO_Y : y;
         quantidade++;
         aceito = true;
         pthread_cond_signal(&cond_pedidos); /* acorda o Gestor */

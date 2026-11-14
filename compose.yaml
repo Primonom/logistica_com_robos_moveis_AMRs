@@ -12,6 +12,7 @@ services:
     command: ["./logistica"]
     environment:
       ATR_MQTT_HOST: broker
+      ATR_SEMENTE: ${ATR_SEMENTE:-}   # vazio = semente pela hora atual
     depends_on:
       - broker
     volumes:

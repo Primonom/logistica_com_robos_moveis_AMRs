@@ -20,6 +20,8 @@
  *   goto <id> <x> <y> envia GOTO à Navegação do robô (só em modo manual)
  *   manual <id> / auto <id>  envia MODO_MANUAL / MODO_AUTO ao robô
  *   caixa <tam> <baia> <zona>  coloca uma caixa no fim da fila (zona A-D)
+ *   mapa              desenho do mapa desta execução em texto (paredes,
+ *                     obstáculos, passagens; ver desenhar_mapa em mapa.c)
  *   historico [n]     últimas n linhas (padrão 30, máx. 100) de
  *                     logs/eventos.csv e logs/cargas.csv (para a operação
  *                     remota ver os registros gravados em disco)
@@ -55,6 +57,7 @@
  *     uma; nada já escrito muda. No pior caso a leitura pega a última linha
  *     pela metade (sem '\n'), e essa linha é descartada. Os vetores de
  *     linhas são locais, então duas chamadas ao mesmo tempo não se misturam.
+ *   - mapa: só LÊ mem->mapa, que não muda depois de gerado (sem mutex).
  *   - "aguarda" (só Console) lê o e_estado do buffer de status a cada
  *     100 ms, com o mutex do robô travado.
  */
@@ -142,7 +145,7 @@ static bool comando_novo(const char *linha, char *resp, int tam)
         x = -1;  /* sem posição: o Gestor usa a posição padrão */
         y = -1;
     } else if (!posicao_valida(x, y)) {
-        return responder(false, resp, tam, "(%d,%d) fora do mapa ou dentro de passagem", x, y);
+        return responder(false, resp, tam, "(%d,%d) invalida: fora do mapa, parede, obstaculo ou passagem", x, y);
     }
     if (!pedir_novo_robo(x, y))
         return responder(false, resp, tam, "fila de pedidos cheia, tente de novo");
@@ -251,7 +254,7 @@ static bool comando_goto(const char *linha, char *resp, int tam)
     if (sscanf(linha, "goto %d %d %d", &id, &x, &y) != 3)
         return responder(false, resp, tam, "uso: goto <id> <x> <y>");
     if (!posicao_valida(x, y))
-        return responder(false, resp, tam, "(%d,%d) fora do mapa ou dentro de passagem", x, y);
+        return responder(false, resp, tam, "(%d,%d) invalida: fora do mapa, parede, obstaculo ou passagem", x, y);
     r = robo_ativo(id);
     if (r == NULL)
         return responder(false, resp, tam, "robo %d nao existe", id);
@@ -363,6 +366,10 @@ bool executar_comando(const char *linha, char *resp, int tam)
     if (strcmp(comando, "auto") == 0)    return comando_modo(linha, MODO_AUTO, resp, tam);
     if (strcmp(comando, "caixa") == 0)   return comando_caixa(linha, resp, tam);
     if (strcmp(comando, "historico") == 0) return comando_historico(linha, resp, tam);
+    if (strcmp(comando, "mapa") == 0) {
+        desenhar_mapa(resp, tam);   /* mem->mapa é só leitura: sem mutex */
+        return true;
+    }
     if (strcmp(comando, "espera") == 0 || strcmp(comando, "aguarda") == 0 ||
         strcmp(comando, "sair") == 0)
         return responder(false, resp, tam, "comando %s nao aceito aqui (so no Console)", comando);

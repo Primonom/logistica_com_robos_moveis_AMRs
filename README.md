@@ -23,6 +23,17 @@ Tópicos MQTT:
 | `atr/robo/novo` | Tela (simulador) | novo robô: `"x y"` ou vazio (posição padrão) |
 | `atr/comando/resposta` | C | `ok`, a saída do comando, ou `erro: ...` |
 
+**Mapa aleatório e IA de rotas (ponto extra):** a cada execução o mapa é
+sorteado (4 passagens com capacidades 1–4 embaralhadas atravessando 3
+paredes, e 45 obstáculos). A semente vem de `ATR_SEMENTE` (sem ela, a hora
+atual); com a mesma semente o mapa se repete. Os caminhos são calculados
+com A* (`src/mapa.c`), que também escolhe as equipes. O comando `mapa`
+mostra o mapa em texto. Para o vídeo e os testes use a semente 42:
+
+```bash
+ATR_SEMENTE=42 ./logistica
+```
+
 O comando `historico [n]` devolve as últimas n linhas (padrão 30, máx. 100)
 de `logs/eventos.csv` e `logs/cargas.csv`; na tela, botão "Carregar histórico
 do disco" no painel Eventos.
@@ -38,6 +49,9 @@ No PowerShell, a partir da raiz do repositório, inicie os serviços:
 ```powershell
 docker compose up --build
 ```
+
+Para fixar o mapa no Docker: `$env:ATR_SEMENTE=42; docker compose up --build`
+(PowerShell) ou `ATR_SEMENTE=42 docker compose up --build` (bash).
 
 A interface fica em http://localhost:8080. O broker MQTT fica acessível apenas
 pela própria máquina em `localhost:1883`; internamente, os containers o acessam

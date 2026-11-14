@@ -141,7 +141,7 @@ def pagina():
         detalhe = PainelDetalhe(fechar_detalhe, enviar)
     with ui.column().classes("w-full p-4 gap-4"):
         cabecalho = Cabecalho()
-        demonstracao = Demonstracao(estado, enviar)   # faixa do roteiro (só aparece no cenário)
+        demonstracao = Demonstracao(estado, enviar, novo_robo)   # faixa do roteiro (só no cenário)
         mapa = PainelMapa(selecionar, enviar, novo_robo, modo_clique)
         robos = PainelRobos(selecionar, enviar)
         with ui.element("div").classes("linha-inferior"):

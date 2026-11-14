@@ -1,115 +1,97 @@
 /*
- * mapa.c — Cálculo de rotas no galpão.
+ * mapa.c — Mapa aleatório do galpão e cálculo de caminhos com A*
+ *          (ponto extra: "IA que otimiza as rotas").
  *
- * Não cria threads e não usa sincronização: são funções puras, chamadas
- * pela Navegação (processo robo) e pelo Console (validação de posição).
+ * Não cria threads. Funções usadas por:
+ *   - processo central: gerar_mapa (main, uma vez, antes das threads),
+ *     calcular_caminho (Organizador escolhe robôs), posicao_valida
+ *     (Console e ponte MQTT), na_estacao (simulador);
+ *   - processo robo: calcular_caminho (Navegação), estacao_mais_proxima e
+ *     na_estacao (Status).
  *
- * Rota simples, sempre pelo corredor principal (y = CORREDOR_Y):
- *   1) anda na vertical da origem até o corredor;
- *   2) anda no corredor, na horizontal, até o x do destino;
- *   3) anda na vertical até o destino.
- * (Se origem e destino estão na mesma coluna, vai direto na vertical.)
- * Cada trecho anda num só eixo, então o simulador (que anda primeiro em x,
- * depois em y) segue exatamente a rota.
+ * 1) GERAÇÃO DO MAPA (gerar_mapa), a cada execução, com a semente da
+ *    variável de ambiente ATR_SEMENTE (ou time(NULL) se ela não existir):
+ *    - 3 paredes verticais fixas, 4 colunas de espessura cada;
+ *    - 4 passagens (túneis de 1 célula) com as capacidades {1, 2, 3, 4}
+ *      embaralhadas; uma parede sorteada recebe 2 passagens e as outras 1;
+ *      y sorteado em 2..27, com 5 ou mais de distância entre duas
+ *      passagens da mesma parede;
+ *    - 45 obstáculos de 1 célula em lugares livres, longe das bocas das
+ *      passagens e fora do corredor y = 15;
+ *    - validação com BFS (busca em largura): de cada baia tem de dar para
+ *      chegar a todas as zonas, estações e à posição padrão. Se não der,
+ *      sorteia de novo (até 100 tentativas).
  *
- * Quando um trecho atravessa uma passagem estreita, são inseridos dois
- * pontos: um logo ANTES da passagem (onde o robô espera o semáforo) e um
- * logo DEPOIS (marcado com a passagem; ao chegar nele o robô a libera).
- * Assim um robô nunca segura mais de uma passagem ao mesmo tempo.
+ * 2) A* (calcular_caminho): menor caminho em grade com vizinhança 4.
+ *    Custo de um passo = 1 + custo extra; o extra só existe ao ENTRAR na
+ *    região de uma passagem: 3 x (robôs dentro dela agora). Assim um robô
+ *    evita, se o desvio compensar, uma passagem que está cheia.
+ *    Heurística = distância de Manhattan até o destino. Ela nunca é maior
+ *    que o custo real (cada passo custa pelo menos 1), ou seja, é
+ *    ADMISSÍVEL: o A* devolve o caminho ÓTIMO.
  *
- * Origem e destino nunca ficam dentro de uma passagem (posicao_valida),
- * então um trecho ou atravessa a passagem inteira ou não toca nela.
+ * Sincronização:
+ *   - mem->mapa: sem mutex, porque é só leitura depois de gerado (ver o
+ *     comentário da struct Mapa em mapa.h).
+ *   - calcular_caminho é chamada ao mesmo tempo por várias threads (no
+ *     robô: Navegação e Status). Ela não tem nenhuma variável static: os
+ *     vetores do A* são LOCAIS (na pilha de quem chama), então cada
+ *     chamada tem os seus e não precisa de mutex.
+ *   - sem_getvalue: o A* lê quantos robôs estão em cada passagem. É uma
+ *     leitura instantânea, só para ESTIMAR o custo: logo depois o valor
+ *     pode mudar (o caminho pode ficar "desatualizado"). Não tem problema:
+ *     quem garante a capacidade continua sendo o sem_timedwait da
+ *     Navegação. No pior caso o robô espera na porta e replaneja.
+ *   - sem_passagem[]: escrito uma vez por abrir_semaforos_passagens(),
+ *     antes de o processo criar as threads; depois só lido.
+ *   - rand() não é seguro entre threads, mas só gerar_mapa o usa, e ela
+ *     roda antes de existirem outras threads.
  */
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 #include "comum.h"
 #include "mapa.h"
 
-static void adicionar(Rota *rota, int x, int y, int passagem)
+#define TENTATIVAS_MAPA   100
+#define DISTANCIA_MIN_Y   5    /* entre duas passagens da mesma parede */
+#define RAIO_BOCA         2    /* sem obstáculo a até 2 células de uma boca */
+#define CUSTO_POR_ROBO    3    /* custo extra por robô dentro da passagem */
+
+sem_t *sem_passagem[N_PASSAGENS];
+
+/* ============================================================
+ * Consultas (usam mem->mapa, só leitura)
+ * ============================================================ */
+
+static bool dentro_da_grade(int x, int y)
 {
-    if (rota->n < MAX_WAYPOINTS) {
-        rota->pontos[rota->n].x = x;
-        rota->pontos[rota->n].y = y;
-        rota->pontos[rota->n].passagem = passagem;
-        rota->n++;
-    }
+    return x >= 0 && x < MAPA_LARGURA && y >= 0 && y < MAPA_ALTURA;
 }
 
-/* Indo de "a" até "b" (numa dimensão), atravessa a faixa [min, max]?
- * Se sim, adiciona o ponto antes da faixa e o ponto depois dela.
- * "fixo" é a outra coordenada (y se horizontal, x se vertical). */
-static void atravessar_faixa(Rota *rota, bool horizontal, int fixo,
-                             int a, int b, int min, int max, int passagem)
+bool celula_livre(int x, int y)
 {
-    int antes, depois;
-
-    if (a < min && b > max) {        /* indo no sentido crescente */
-        antes = min - 1;
-        depois = max + 1;
-    } else if (a > max && b < min) { /* indo no sentido decrescente */
-        antes = max + 1;
-        depois = min - 1;
-    } else {
-        return;                      /* não atravessa */
-    }
-    if (horizontal) {
-        adicionar(rota, antes, fixo, -1);
-        adicionar(rota, depois, fixo, passagem);
-    } else {
-        adicionar(rota, fixo, antes, -1);
-        adicionar(rota, fixo, depois, passagem);
-    }
+    return dentro_da_grade(x, y) && mem->mapa.tipo[y][x] == LIVRE;
 }
 
-/* Trecho horizontal no corredor, de xa até xb. */
-static void trecho_horizontal(Rota *rota, int xa, int xb)
+int passagem_em(int x, int y)
 {
-    int y = CORREDOR_Y;
-
-    if (xa < xb) { /* para a direita: encontra P1 antes de P2 */
-        atravessar_faixa(rota, true, y, xa, xb, P1_X_MIN, P1_X_MAX, P1);
-        atravessar_faixa(rota, true, y, xa, xb, P2_X_MIN, P2_X_MAX, P2);
-    } else {       /* para a esquerda: encontra P2 antes de P1 */
-        atravessar_faixa(rota, true, y, xa, xb, P2_X_MIN, P2_X_MAX, P2);
-        atravessar_faixa(rota, true, y, xa, xb, P1_X_MIN, P1_X_MAX, P1);
-    }
-    adicionar(rota, xb, y, -1);
-}
-
-/* Trecho vertical na coluna x, de ya até yb. Só a coluna P3_X tem passagem. */
-static void trecho_vertical(Rota *rota, int x, int ya, int yb)
-{
-    if (x == P3_X) {
-        if (ya < yb) { /* descendo: encontra a parte de cima primeiro */
-            atravessar_faixa(rota, false, x, ya, yb, P3_CIMA_Y_MIN, P3_CIMA_Y_MAX, P3);
-            atravessar_faixa(rota, false, x, ya, yb, P3_BAIXO_Y_MIN, P3_BAIXO_Y_MAX, P3);
-        } else {       /* subindo: encontra a parte de baixo primeiro */
-            atravessar_faixa(rota, false, x, ya, yb, P3_BAIXO_Y_MIN, P3_BAIXO_Y_MAX, P3);
-            atravessar_faixa(rota, false, x, ya, yb, P3_CIMA_Y_MIN, P3_CIMA_Y_MAX, P3);
-        }
-    }
-    adicionar(rota, x, yb, -1);
-}
-
-/* Monta a rota de (x0, y0) até (xd, yd). */
-void calcular_rota(int x0, int y0, int xd, int yd, Rota *rota)
-{
-    rota->n = 0;
-    if (x0 == xd) {
-        trecho_vertical(rota, x0, y0, yd);
-        return;
-    }
-    trecho_vertical(rota, x0, y0, CORREDOR_Y);
-    trecho_horizontal(rota, x0, xd);
-    trecho_vertical(rota, xd, CORREDOR_Y, yd);
+    if (!dentro_da_grade(x, y))
+        return -1;
+    return mem->mapa.passagem[y][x];
 }
 
 bool dentro_de_passagem(int x, int y)
 {
-    if (x >= P1_X_MIN && x <= P1_X_MAX) return true;
-    if (x >= P2_X_MIN && x <= P2_X_MAX) return true;
-    if (x == P3_X && y >= P3_CIMA_Y_MIN && y <= P3_CIMA_Y_MAX) return true;
-    if (x == P3_X && y >= P3_BAIXO_Y_MIN && y <= P3_BAIXO_Y_MAX) return true;
-    return false;
+    return passagem_em(x, y) != -1;
+}
+
+/* Posição aceita para novo robô e goto: livre e fora das passagens (um
+ * robô parado numa passagem ocuparia a vaga sem ter o semáforo). */
+bool posicao_valida(int x, int y)
+{
+    return celula_livre(x, y) && !dentro_de_passagem(x, y);
 }
 
 bool na_estacao(int x, int y)
@@ -122,24 +104,420 @@ bool na_estacao(int x, int y)
     return false;
 }
 
-/* Estação de recarga mais próxima (distância |dx| + |dy|). */
+/* Estação com o MENOR CAMINHO (A*) a partir de (x, y). Se nenhuma tem
+ * caminho (não acontece num mapa validado), fica a primeira. */
 void estacao_mais_proxima(int x, int y, int *ex, int *ey)
 {
-    int i, d, melhor = -1;
+    Caminho c;
+    int i, melhor = -1;
 
+    *ex = ESTACAO_X[0];
+    *ey = ESTACAO_Y[0];
     for (i = 0; i < N_ESTACOES; i++) {
-        d = abs(x - ESTACAO_X[i]) + abs(y - ESTACAO_Y[i]);
-        if (melhor == -1 || d < melhor) {
-            melhor = d;
+        if (calcular_caminho(x, y, ESTACAO_X[i], ESTACAO_Y[i], &c) &&
+            (melhor == -1 || c.n < melhor)) {
+            melhor = c.n;
             *ex = ESTACAO_X[i];
             *ey = ESTACAO_Y[i];
         }
     }
 }
 
-bool posicao_valida(int x, int y)
+/* ============================================================
+ * Semáforos das passagens (para o custo dinâmico do A*)
+ * ============================================================ */
+
+/* Abre os semáforos já criados pelo main (nomes /atr_passagem_1..4).
+ * Cada processo chama uma vez, antes de criar as suas threads. */
+void abrir_semaforos_passagens(void)
 {
-    if (x < 0 || x >= MAPA_LARGURA || y < 0 || y >= MAPA_ALTURA)
+    char nome[32];
+    int i;
+
+    for (i = 0; i < N_PASSAGENS; i++) {
+        snprintf(nome, sizeof(nome), "%s%d", PREFIXO_SEM_PASSAGEM, i + 1);
+        sem_passagem[i] = sem_open(nome, 0);
+        if (sem_passagem[i] == SEM_FAILED) { perror("sem_open passagem"); exit(1); }
+    }
+}
+
+void fechar_semaforos_passagens(void)
+{
+    int i;
+
+    for (i = 0; i < N_PASSAGENS; i++)
+        sem_close(sem_passagem[i]);
+}
+
+/* Quantos robôs estão dentro de cada passagem AGORA (estimativa: ver
+ * "Sincronização" no topo). ocupados = capacidade - vagas livres. */
+static void ler_ocupacao(int ocupados[])
+{
+    int i, livres;
+
+    for (i = 0; i < N_PASSAGENS; i++) {
+        ocupados[i] = 0;
+        if (sem_getvalue(sem_passagem[i], &livres) == 0 &&
+            livres < mem->mapa.passagens[i].capacidade)
+            ocupados[i] = mem->mapa.passagens[i].capacidade - livres;
+    }
+}
+
+/* ============================================================
+ * A* (calcular_caminho)
+ * ============================================================
+ *
+ * Vocabulário (cada célula tem um índice i = y * LARGURA + x):
+ *   g[i]   = custo do melhor caminho conhecido da origem até i;
+ *   h(i)   = estimativa do custo de i até o destino (Manhattan);
+ *   f[i]   = g[i] + h(i) = estimativa do caminho inteiro passando por i;
+ *   pai[i] = de qual célula se chegou em i (para remontar o caminho);
+ *   lista ABERTA  = células descobertas que ainda falta expandir;
+ *   lista FECHADA = células já expandidas (o g delas é definitivo).
+ *
+ * Passo a passo:
+ *   1) a origem entra na lista aberta com g = 0;
+ *   2) tira da lista aberta a célula de MENOR f (a mais promissora);
+ *   3) se ela é o destino, acabou: remonta o caminho pelos pais;
+ *   4) senão, fecha a célula e olha os 4 vizinhos livres: se chegar ao
+ *      vizinho por ela é mais barato que o g que ele tinha, atualiza g, f
+ *      e pai e coloca o vizinho na lista aberta;
+ *   5) volta ao passo 2. Lista aberta vazia = não há caminho.
+ *
+ * Complexidade: a lista aberta é procurada com busca LINEAR (passa pelas
+ * 1800 células para achar o menor f), sem heap. No pior caso cada célula
+ * é expandida uma vez: 1800 x 1800 ≈ 3,2 milhões de comparações, poucos
+ * milissegundos — sobra muito dentro do período de 100 ms da Navegação.
+ * Com uma grade tão pequena, um heap só deixaria o código mais difícil.
+ *
+ * Por que não precisa "reabrir" células fechadas: a heurística de
+ * Manhattan também é CONSISTENTE (entre dois vizinhos ela muda no máximo
+ * 1, e todo passo custa pelo menos 1). Assim, quando uma célula sai da
+ * lista aberta, o g dela já é o menor possível.
+ */
+
+enum { NAO_VISTA, ABERTA, FECHADA };
+
+static int heuristica(int x, int y, int xd, int yd)
+{
+    return abs(x - xd) + abs(y - yd);
+}
+
+/* Custo de ir da célula (xa, ya) para a vizinha (xb, yb). */
+static int custo_passo(int xa, int ya, int xb, int yb, const int ocupados[])
+{
+    int p = passagem_em(xb, yb);
+
+    if (p != -1 && passagem_em(xa, ya) != p)   /* entrando na região de p */
+        return 1 + CUSTO_POR_ROBO * ocupados[p];
+    return 1;
+}
+
+bool calcular_caminho(int x0, int y0, int xd, int yd, Caminho *c)
+{
+    /* POR QUE vetores LOCAIS (e não static): Navegação e Status chamam o A*
+     * ao mesmo tempo; com vetores static uma thread estragaria a busca da
+     * outra. Locais, cada chamada tem os seus e não precisa de mutex. */
+    int g[N_CELULAS], f[N_CELULAS], pai[N_CELULAS];
+    char situacao[N_CELULAS];
+    int ocupados[N_PASSAGENS];
+    static const int DX[4] = {1, -1, 0, 0};
+    static const int DY[4] = {0, 0, 1, -1};
+    int i, k, atual, ax, ay, vx, vy, v, novo_g, n, destino;
+
+    c->n = 0;
+    if (!dentro_da_grade(x0, y0) || !celula_livre(xd, yd))
         return false;
-    return !dentro_de_passagem(x, y);
+    ler_ocupacao(ocupados);
+    memset(situacao, NAO_VISTA, sizeof(situacao));
+    destino = yd * MAPA_LARGURA + xd;
+
+    /* 1) origem na lista aberta */
+    i = y0 * MAPA_LARGURA + x0;
+    g[i] = 0;
+    f[i] = heuristica(x0, y0, xd, yd);
+    pai[i] = -1;
+    situacao[i] = ABERTA;
+
+    while (1) {
+        /* 2) menor f da lista aberta (busca linear; empate: menor índice) */
+        atual = -1;
+        for (i = 0; i < N_CELULAS; i++)
+            if (situacao[i] == ABERTA && (atual == -1 || f[i] < f[atual]))
+                atual = i;
+        if (atual == -1)
+            return false;              /* lista aberta vazia: sem caminho */
+        if (atual == destino)
+            break;                     /* 3) chegou */
+
+        /* 4) fecha e olha os vizinhos */
+        situacao[atual] = FECHADA;
+        ax = atual % MAPA_LARGURA;
+        ay = atual / MAPA_LARGURA;
+        for (k = 0; k < 4; k++) {
+            vx = ax + DX[k];
+            vy = ay + DY[k];
+            if (!celula_livre(vx, vy))
+                continue;
+            v = vy * MAPA_LARGURA + vx;
+            if (situacao[v] == FECHADA)
+                continue;
+            novo_g = g[atual] + custo_passo(ax, ay, vx, vy, ocupados);
+            if (situacao[v] == NAO_VISTA || novo_g < g[v]) {
+                g[v] = novo_g;
+                f[v] = novo_g + heuristica(vx, vy, xd, yd);
+                pai[v] = atual;
+                situacao[v] = ABERTA;
+            }
+        }
+    }
+
+    /* Remonta o caminho do destino para trás, seguindo os pais. */
+    n = 0;
+    for (i = destino; i != -1; i = pai[i])
+        n++;
+    if (n > MAX_CAMINHO)
+        return false;
+    c->n = n;
+    for (i = destino; i != -1; i = pai[i]) {
+        n--;
+        c->x[n] = i % MAPA_LARGURA;
+        c->y[n] = i / MAPA_LARGURA;
+    }
+    return true;
+}
+
+/* ============================================================
+ * Geração do mapa (só gerar_mapa escreve em mem->mapa)
+ * ============================================================ */
+
+/* Célula reservada (baia, zona, estação ou posição padrão)? */
+static bool ponto_fixo(int x, int y)
+{
+    int i;
+
+    for (i = 0; i < N_BAIAS; i++)
+        if (x == BAIA_X[i] && y == BAIA_Y[i]) return true;
+    for (i = 0; i < N_ZONAS; i++)
+        if (x == ZONA_X[i] && y == ZONA_Y[i]) return true;
+    if (na_estacao(x, y))
+        return true;
+    return x == POS_PADRAO_X && y == POS_PADRAO_Y;
+}
+
+/* A até RAIO_BOCA células (quadrado 5x5) da boca de alguma passagem? */
+static bool perto_de_boca(const Mapa *m, int x, int y)
+{
+    int i;
+    const Passagem *p;
+
+    for (i = 0; i < N_PASSAGENS; i++) {
+        p = &m->passagens[i];
+        if (abs(y - p->y) <= RAIO_BOCA &&
+            (abs(x - p->x_entrada) <= RAIO_BOCA || abs(x - p->x_saida) <= RAIO_BOCA))
+            return true;
+    }
+    return false;
+}
+
+/* Pode haver obstáculo em (x, y)? */
+static bool aceita_obstaculo(const Mapa *m, int x, int y)
+{
+    return m->tipo[y][x] == LIVRE && m->passagem[y][x] == -1 &&
+           y != CORREDOR_Y && !ponto_fixo(x, y) && !perto_de_boca(m, x, y);
+}
+
+/* Sorteia o y de uma passagem na parede "parede", a 5 ou mais de
+ * distância das passagens já sorteadas na mesma parede (0..n-1). */
+static int sortear_y(const Mapa *m, int n, int parede)
+{
+    int y, i;
+    bool perto;
+
+    do {
+        y = 2 + rand() % 26;   /* 2..27 */
+        perto = false;
+        for (i = 0; i < n; i++)
+            if (m->passagens[i].parede == parede &&
+                abs(m->passagens[i].y - y) < DISTANCIA_MIN_Y)
+                perto = true;
+    } while (perto);
+    return y;
+}
+
+/* Sorteia paredes, passagens e obstáculos (uma tentativa). */
+static void sortear(Mapa *m)
+{
+    int capacidades[N_PASSAGENS] = {1, 2, 3, 4};
+    int x, y, i, j, t, w, dupla, n;
+    Passagem *p;
+
+    /* tudo livre, depois as paredes inteiras */
+    for (y = 0; y < MAPA_ALTURA; y++)
+        for (x = 0; x < MAPA_LARGURA; x++) {
+            m->tipo[y][x] = LIVRE;
+            m->passagem[y][x] = -1;
+        }
+    for (w = 0; w < N_PAREDES; w++)
+        for (y = 0; y < MAPA_ALTURA; y++)
+            for (x = PAREDE_X[w]; x < PAREDE_X[w] + ESPESSURA_PAREDE; x++)
+                m->tipo[y][x] = PAREDE;
+
+    /* capacidades embaralhadas (Fisher-Yates) */
+    for (i = N_PASSAGENS - 1; i > 0; i--) {
+        j = rand() % (i + 1);
+        t = capacidades[i];
+        capacidades[i] = capacidades[j];
+        capacidades[j] = t;
+    }
+
+    /* passagens: 1 por parede e mais 1 na parede "dupla". Numeradas da
+     * esquerda para a direita (e de cima para baixo na mesma parede). */
+    dupla = rand() % N_PAREDES;
+    n = 0;
+    for (w = 0; w < N_PAREDES; w++) {
+        m->passagens[n].parede = w;
+        m->passagens[n].y = sortear_y(m, n, w);
+        n++;
+        if (w == dupla) {
+            m->passagens[n].parede = w;
+            m->passagens[n].y = sortear_y(m, n, w);
+            if (m->passagens[n].y < m->passagens[n - 1].y) {   /* de cima para baixo */
+                t = m->passagens[n].y;
+                m->passagens[n].y = m->passagens[n - 1].y;
+                m->passagens[n - 1].y = t;
+            }
+            n++;
+        }
+    }
+
+    /* abre o túnel e marca a região (bocas + túnel) de cada passagem */
+    for (i = 0; i < N_PASSAGENS; i++) {
+        p = &m->passagens[i];
+        p->capacidade = capacidades[i];
+        p->x_entrada = PAREDE_X[p->parede] - 1;
+        p->x_saida = PAREDE_X[p->parede] + ESPESSURA_PAREDE;
+        for (x = p->x_entrada; x <= p->x_saida; x++) {
+            m->tipo[p->y][x] = LIVRE;
+            m->passagem[p->y][x] = i;
+        }
+    }
+
+    /* obstáculos isolados (1x1) em lugares permitidos */
+    n = 0;
+    while (n < N_OBSTACULOS) {
+        x = rand() % MAPA_LARGURA;
+        y = rand() % MAPA_ALTURA;
+        if (aceita_obstaculo(m, x, y)) {
+            m->tipo[y][x] = OBSTACULO;
+            n++;
+        }
+    }
+}
+
+/* BFS a partir de (x0, y0): marca em alcancavel[] toda célula livre que
+ * dá para alcançar. Fila simples num vetor (cada célula entra no máximo
+ * uma vez). */
+static void bfs(const Mapa *m, int x0, int y0, bool alcancavel[])
+{
+    static const int DX[4] = {1, -1, 0, 0};
+    static const int DY[4] = {0, 0, 1, -1};
+    int fila[N_CELULAS];
+    int inicio = 0, fim = 0, i, k, x, y;
+
+    memset(alcancavel, 0, N_CELULAS * sizeof(bool));
+    alcancavel[y0 * MAPA_LARGURA + x0] = true;
+    fila[fim++] = y0 * MAPA_LARGURA + x0;
+    while (inicio < fim) {
+        i = fila[inicio++];
+        for (k = 0; k < 4; k++) {
+            x = i % MAPA_LARGURA + DX[k];
+            y = i / MAPA_LARGURA + DY[k];
+            if (x < 0 || x >= MAPA_LARGURA || y < 0 || y >= MAPA_ALTURA ||
+                m->tipo[y][x] != LIVRE || alcancavel[y * MAPA_LARGURA + x])
+                continue;
+            alcancavel[y * MAPA_LARGURA + x] = true;
+            fila[fim++] = y * MAPA_LARGURA + x;
+        }
+    }
+}
+
+/* De cada baia dá para chegar a todas as zonas, estações e à posição padrão? */
+static bool mapa_conectado(const Mapa *m)
+{
+    bool alcancavel[N_CELULAS];
+    int b, i;
+
+    for (b = 0; b < N_BAIAS; b++) {
+        bfs(m, BAIA_X[b], BAIA_Y[b], alcancavel);
+        for (i = 0; i < N_ZONAS; i++)
+            if (!alcancavel[ZONA_Y[i] * MAPA_LARGURA + ZONA_X[i]]) return false;
+        for (i = 0; i < N_ESTACOES; i++)
+            if (!alcancavel[ESTACAO_Y[i] * MAPA_LARGURA + ESTACAO_X[i]]) return false;
+        if (!alcancavel[POS_PADRAO_Y * MAPA_LARGURA + POS_PADRAO_X]) return false;
+    }
+    return true;
+}
+
+/* Processo central, thread principal, ANTES de criar threads e robôs. */
+void gerar_mapa(Mapa *m)
+{
+    const char *texto = getenv("ATR_SEMENTE");
+    int tentativa, i;
+    Passagem *p;
+
+    m->semente = (texto != NULL && texto[0] != '\0') ? (unsigned int)atoi(texto)
+                                                     : (unsigned int)time(NULL);
+    srand(m->semente);
+    for (tentativa = 1; tentativa <= TENTATIVAS_MAPA; tentativa++) {
+        sortear(m);
+        if (mapa_conectado(m))
+            break;
+    }
+    if (tentativa > TENTATIVAS_MAPA) {
+        fprintf(stderr, "Nao foi possivel gerar um mapa conectado (semente %u)\n", m->semente);
+        exit(1);
+    }
+
+    printf("Mapa gerado com semente %u\n", m->semente);
+    for (i = 0; i < N_PASSAGENS; i++) {
+        p = &m->passagens[i];
+        printf("  P%d: parede %d, y = %d, x %d..%d, capacidade %d\n", i + 1,
+               p->parede + 1, p->y, p->x_entrada, p->x_saida, p->capacidade);
+    }
+}
+
+/* Texto do mapa para o comando "mapa" do Console:
+ *   # parede   o obstáculo   1-4 região da passagem P1-P4
+ *   B baia     Z zona        E estação   R posição padrão   . livre
+ * "saida" precisa ter espaço para o mapa inteiro (cerca de 1,9 KB). */
+#define TAMANHO_DESENHO (64 + MAPA_ALTURA * (MAPA_LARGURA + 1))
+void desenhar_mapa(char *saida, int tam)
+{
+    int x, y, i, p, usado;
+    char ch;
+
+    if (tam < TAMANHO_DESENHO) {
+        snprintf(saida, tam, "resposta pequena demais para o mapa\n");
+        return;
+    }
+    usado = sprintf(saida, "Mapa (semente %u):\n", mem->mapa.semente);
+    for (y = 0; y < MAPA_ALTURA; y++) {
+        for (x = 0; x < MAPA_LARGURA; x++) {
+            p = mem->mapa.passagem[y][x];
+            if (mem->mapa.tipo[y][x] == PAREDE)         ch = '#';
+            else if (mem->mapa.tipo[y][x] == OBSTACULO) ch = 'o';
+            else if (p != -1)                           ch = (char)('1' + p);
+            else                                        ch = '.';
+            for (i = 0; i < N_BAIAS; i++)
+                if (x == BAIA_X[i] && y == BAIA_Y[i]) ch = 'B';
+            for (i = 0; i < N_ZONAS; i++)
+                if (x == ZONA_X[i] && y == ZONA_Y[i]) ch = 'Z';
+            if (na_estacao(x, y)) ch = 'E';
+            if (x == POS_PADRAO_X && y == POS_PADRAO_Y) ch = 'R';
+            saida[usado++] = ch;
+        }
+        saida[usado++] = '\n';
+    }
+    saida[usado] = '\0';
 }

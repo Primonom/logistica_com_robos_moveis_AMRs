@@ -1,9 +1,10 @@
 /*
  * main.c — Processo central (logistica).
  *
- * Cria os objetos de IPC (memória compartilhada /atr_shm, fila
- * /atr_coletor e semáforos das passagens /atr_passagem_<n>), cria as
- * threads e faz o encerramento limpo.
+ * Gera o mapa desta execução (mapa.c, semente ATR_SEMENTE), cria os
+ * objetos de IPC (memória compartilhada /atr_shm, fila /atr_coletor e
+ * semáforos das passagens /atr_passagem_1..4), cria as threads e faz o
+ * encerramento limpo.
  *
  * Uso: ./logistica [arquivo_de_caixas]   (padrão: config/caixas.txt)
  *
@@ -16,9 +17,12 @@
  *   removidas na próxima inicialização (unlink dos nomes antigos).
  *
  * Sincronização:
+ *   - mem->mapa: escrito por gerar_mapa() AQUI, antes de criar qualquer
+ *     thread ou robô; depois só lido. Por isso não tem mutex (ver mapa.h).
  *   - Semáforos contadores nomeados /atr_passagem_<n>, com valor inicial =
- *     capacidade da passagem: criados aqui, usados pela Navegação dos robôs
- *     (ver navegacao.c).
+ *     capacidade SORTEADA da passagem: criados aqui, usados pela Navegação
+ *     dos robôs (ver navegacao.c) e lidos pelo A* (custo dinâmico) e pela
+ *     ponte MQTT (exibição).
  *   - mem->encerrar (atomic_bool): avisa todas as tarefas para pararem.
  *   - pthread_join / waitpid: espera threads e processos terminarem antes
  *     de destruir os recursos que eles usam.
@@ -64,7 +68,7 @@ static void criar_semaforos(void)
     for (i = 0; i < N_PASSAGENS; i++) {
         snprintf(nome, sizeof(nome), "%s%d", PREFIXO_SEM_PASSAGEM, i + 1);
         sem_unlink(nome); /* remove sobra de execução anterior */
-        sem = sem_open(nome, O_CREAT | O_EXCL, 0600, CAPACIDADE_PASSAGEM[i]);
+        sem = sem_open(nome, O_CREAT | O_EXCL, 0600, mem->mapa.passagens[i].capacidade);
         if (sem == SEM_FAILED) { perror("sem_open"); exit(1); }
         sem_close(sem);
     }
@@ -116,16 +120,21 @@ int main(int argc, char *argv[])
 {
     pthread_t th_coletor, th_gestor, th_simulador, th_organizador, th_ponte;
     char *arquivo_caixas = (argc > 1) ? argv[1] : "config/caixas.txt";
+    char texto[64];
 
     setvbuf(stdout, NULL, _IOLBF, 0); /* imprime linha a linha, mesmo em pipe */
 
     mem = criar_memoria();
+    gerar_mapa(&mem->mapa); /* ANTES das threads e dos robôs (ver mapa.h) */
     fila_coletor = criar_fila_coletor();
     criar_semaforos();
+    abrir_semaforos_passagens(); /* A* do Organizador e a ponte MQTT */
     ponte_criar(); /* antes das threads: o Coletor e a ponte usam o cliente */
 
     criar_thread(&th_coletor, tarefa_coletor, NULL, "coletor");
     registrar_evento(fila_coletor, -1, "sistema iniciado");
+    snprintf(texto, sizeof(texto), "mapa gerado com semente %u", mem->mapa.semente);
+    registrar_evento(fila_coletor, -1, texto);
     criar_thread(&th_gestor, tarefa_gestor, NULL, "gestor");
     criar_thread(&th_simulador, tarefa_simulador, NULL, "simulador");
     criar_thread(&th_organizador, tarefa_organizador, arquivo_caixas, "organizador");
@@ -158,6 +167,7 @@ int main(int argc, char *argv[])
     mq_close(fila_coletor);
     if (mq_unlink(NOME_FILA_COLETOR) == -1) perror("mq_unlink coletor");
     ponte_destruir(); /* depois do Coletor: ele publica até o último evento */
+    fechar_semaforos_passagens();
     remover_semaforos();
     destruir_memoria(mem);
     printf("Fim.\n");

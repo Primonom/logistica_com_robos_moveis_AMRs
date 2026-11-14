@@ -219,7 +219,7 @@ class PainelDetalhe:
             with ui.grid(columns=2).classes("w-full gap-x-3 gap-y-0 card-info"):
                 self.campos = {}
                 for nome in ("Modo", "Posição", "Setpoint", "Destino", "Distância", "Carga",
-                             "Equipe", "Waypoints"):
+                             "Equipe", "Cantos da rota"):
                     ui.label(nome).classes("rotulo-campo")
                     self.campos[nome] = ui.label()
             ui.separator().props("dark")
@@ -274,7 +274,7 @@ class PainelDetalhe:
                    "Destino": _ponto(r["destino_x"], r["destino_y"]),
                    "Distância": f"{r['distancia']:.0f} células",
                    "Carga": "—" if r["carga"] == -1 else f"caixa #{r['carga']}",
-                   "Equipe": texto_equipe(r), "Waypoints": str(len(r.get("rota", [])))}
+                   "Equipe": texto_equipe(r), "Cantos da rota": str(len(r.get("rota", [])))}
         for nome, valor in valores.items():
             self.campos[nome].set_text(valor)
         self.controles.atualizar(r, destinos_rapidos(dados["mapa"]))

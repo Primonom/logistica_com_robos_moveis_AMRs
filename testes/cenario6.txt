@@ -1,0 +1,28 @@
+# Cenário 6: passagem de capacidade 1 disputada por 2 robôs, com
+# replanejamento (rodar com ATR_SEMENTE=5: na parede 1 ficam P1, y = 12,
+# capacidade 2, e P2, y = 20, capacidade 1).
+#  - robô 0 em (9,20) e robô 1 em (7,20), os dois em modo manual;
+#  - bateria do robô 0 = 1%: depois de 5 células (já dentro do túnel da
+#    P2) ela chega a 0% e ele entra em DEFEITO, parado e SEGURANDO a P2;
+#  - o goto do robô 1 para (22,13) sai ANTES, com a P2 vazia: pelo A* a P2
+#    custa 22 e a P1 custa 24, então ele vai pela P2;
+#  - na porta da P2 (cheia) ele espera ("esperando passagem P2"); depois
+#    de 3 s recalcula o A* a partir de (11,20): pela P2 são 18 passos + 3
+#    (1 robô dentro) = 21, pela P1 são 20 passos; então "replanejou rota:
+#    passagem P2 cheia" e atravessa pela P1 até (22,13).
+mapa
+novo 9 20
+novo 7 20
+aguarda 1 DISPONIVEL
+manual 0
+manual 1
+aguarda 0 MANUAL
+aguarda 1 MANUAL
+bateria 0 1
+goto 1 22 13
+goto 0 20 20
+aguarda 0 DEFEITO
+status
+espera 12
+status
+sair

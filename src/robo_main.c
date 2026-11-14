@@ -8,6 +8,11 @@
  * Threads: principal, Comando de Navegação e Status do Robô.
  *   A principal só cria as duas threads e espera elas terminarem.
  * Sincronização:
+ *   - semáforos das passagens: abertos aqui (abrir_semaforos_passagens)
+ *     ANTES de criar as threads; a Navegação usa para entrar/sair e o A*
+ *     (Navegação e Status) lê a ocupação. O vetor sem_passagem[] não muda
+ *     depois disso, então não precisa de mutex.
+ *   - mem->mapa: só leitura (gerado pelo processo central antes do fork).
  *   - estado_local (struct deste processo, com mutex comum): é por ela que
  *     Navegação e Status trocam informação (ver comum.h).
  *   - mem->encerrar (atomic_bool): as threads terminam quando ele vira
@@ -21,6 +26,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "comum.h"
+#include "mapa.h"
 
 /* Variáveis globais deste processo (declaradas em comum.h). */
 MemoriaCompartilhada *mem;
@@ -50,6 +56,7 @@ int main(int argc, char *argv[])
 
     printf("Robo %d vivo (pid %d)\n", id_robo, (int)getpid());
     registrar_evento(fila_coletor, id_robo, "robo vivo");
+    abrir_semaforos_passagens();
 
     if (pthread_create(&th_status, NULL, tarefa_status, NULL) != 0 ||
         pthread_create(&th_navegacao, NULL, tarefa_navegacao, NULL) != 0) {
@@ -59,6 +66,7 @@ int main(int argc, char *argv[])
     pthread_join(th_navegacao, NULL);
     pthread_join(th_status, NULL);
 
+    fechar_semaforos_passagens();
     mq_close(fila_coletor);
     fechar_memoria(mem);
     return 0;

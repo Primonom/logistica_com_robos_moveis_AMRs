@@ -39,6 +39,16 @@
  *     baia dela libera ela é a primeira candidata, com a regra acima
  *     segurando a fila até juntar a equipe dela.
  *
+ * Escolha da equipe com IA (A*, mapa.c):
+ *   - "mais próximo" = MENOR CAMINHO A* do robô até a baia (desvia de
+ *     paredes e obstáculos e já conta o custo das passagens cheias), e
+ *     não a distância em linha reta. Robô sem caminho até a baia não serve;
+ *   - LÍDER = o membro de menor caminho total "posição -> baia -> zona".
+ *     O trecho baia -> zona é igual para todos (todos saem da mesma
+ *     baia), então o líder é o membro mais perto da baia, ou seja, o
+ *     primeiro escolhido (empate: menor id, porque a escolha percorre os
+ *     ids em ordem e só troca por um caminho ESTRITAMENTE menor).
+ *
  * Leitura dos robôs: SÓ o buffer de status (e_estado, e_posicao_x/y) e
  * modo_automatico, NUNCA o hw.
  *
@@ -52,6 +62,8 @@
  *     ACOPLAR vai para todos no mesmo ciclo (acoplamento síncrono).
  *   - pegar_robos_novos(): aviso assíncrono do Gestor (ver gestor.c).
  *   - equipes[] e em_equipe[] só são usados por esta thread: sem mutex.
+ *   - calcular_caminho (A*): lê mem->mapa (só leitura) e a ocupação das
+ *     passagens com sem_getvalue (estimativa; ver mapa.c).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,7 +79,7 @@ typedef struct {
     int   indice_caixa;                 /* posição dela em mem->caixas */
     int   membros[TAMANHO_MAX_CAIXA];
     int   n;
-    int   lider;                        /* membro de menor id */
+    int   lider;                        /* membro mais perto da baia (A*) */
     bool  pausada;                      /* mandou PAUSAR (membro em DEFEITO) */
 } Equipe;
 
@@ -295,6 +307,8 @@ static void acompanhar_equipe(Equipe *e)
         msg.y = ZONA_Y[z];
         msg.carga_id = e->caixa.id;
         msg.lider_id = e->lider;
+        msg.n_membros = e->n;           /* o líder precisa saber quem é a equipe */
+        memcpy(msg.membros, e->membros, sizeof(msg.membros));
         enviar_todos(e, &msg);
         e->fase = TRANSPORTANDO;
         snprintf(texto, sizeof(texto), "caixa %d: erguida por todos, IR_ZONA %c (lider %d)",
@@ -305,13 +319,15 @@ static void acompanhar_equipe(Equipe *e)
     }
 }
 
-/* Escolhe até "tamanho" robôs livres, os mais próximos de (bx, by).
+/* Escolhe até "tamanho" robôs livres, os de MENOR CAMINHO A* até
+ * (bx, by), em ordem crescente de caminho (escolhidos[0] = o mais perto).
  * Livre = DISPONIVEL, automático e com bateria >= BATERIA_MINIMA_TAREFA
- * (pelo buffer de status) e fora de equipe. Retorna quantos achou (pode
- * ser menos que "tamanho"). */
+ * (pelo buffer de status), fora de equipe e com caminho até a baia.
+ * Retorna quantos achou (pode ser menos que "tamanho"). */
 static int escolher_robos(int tamanho, int bx, int by, int escolhidos[])
 {
     int distancia[MAX_ROBOS];
+    Caminho c;
     int i, k, x, y, bateria, n = 0, melhor;
     Estado estado;
     bool automatico, ativo;
@@ -325,10 +341,13 @@ static int escolher_robos(int tamanho, int bx, int by, int escolhidos[])
         if (!ativo || !automatico || em_equipe[i])
             continue;
         ler_status(i, &estado, &x, &y, &bateria);
-        if (estado == DISPONIVEL && bateria >= BATERIA_MINIMA_TAREFA)
-            distancia[i] = abs(x - bx) + abs(y - by);
+        /* A* fora de qualquer mutex (o ler_status já soltou o do robô). */
+        if (estado == DISPONIVEL && bateria >= BATERIA_MINIMA_TAREFA &&
+            calcular_caminho(x, y, bx, by, &c))
+            distancia[i] = c.n - 1;   /* número de passos */
     }
-    /* Seleção simples: pega o mais próximo, depois o próximo, ... */
+    /* Seleção simples: pega o mais próximo, depois o próximo, ...
+     * (empate: menor id, porque só troca com "<"). */
     for (k = 0; k < tamanho; k++) {
         melhor = -1;
         for (i = 0; i < MAX_ROBOS; i++)
@@ -372,11 +391,12 @@ static void formar_equipe(Equipe *e, Caixa c, int indice, int membros[])
     e->caixa = c;
     e->indice_caixa = indice;
     e->n = c.tamanho;
+    /* Líder = menor caminho posição -> baia -> zona. Como baia -> zona é
+     * igual para todos, é o mais perto da baia: membros[0] (ver o topo). */
     e->lider = membros[0];
     for (k = 0; k < e->n; k++) {
         e->membros[k] = membros[k];
         em_equipe[membros[k]] = true;
-        if (membros[k] < e->lider) e->lider = membros[k];
     }
     e->fase = INDO_BAIA;
     e->pausada = false;
