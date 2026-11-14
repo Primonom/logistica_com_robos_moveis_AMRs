@@ -73,6 +73,10 @@
  *   - equipes[] e em_equipe[] só são usados por esta thread: sem mutex.
  *   - calcular_caminho (A*): lê mem->mapa (só leitura) e a ocupação das
  *     passagens com sem_getvalue (estimativa; ver mapa.c).
+ *   - mem->mutex_tempos (PROCESS_SHARED): no fim de cada ciclo grava a
+ *     medição (C, atraso, perdas) em mem->med_organizador; o comando
+ *     "tempos" lê/zera ao mesmo tempo. Travado sozinho.
+ *   - Com ATR_TEMPO_REAL=1: SCHED_FIFO prioridade 60 (tempo_real.c).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -509,16 +513,18 @@ static void atribuir_caixas(void)
 
 void *tarefa_organizador(void *arg)
 {
-    struct timespec proximo;
+    struct timespec proximo, inicio, fim;
     char texto[64];
     int b, novos;
 
+    ativar_tempo_real(PRIO_ORGANIZADOR, "organizador");
     carregar_caixas((const char *)arg);
     for (b = 0; b < N_BAIAS; b++)
         equipes[b].fase = SEM_EQUIPE;
 
     clock_gettime(CLOCK_MONOTONIC, &proximo);
     while (!atomic_load(&mem->encerrar)) {
+        clock_gettime(CLOCK_MONOTONIC, &inicio);
         novos = pegar_robos_novos();
         if (novos > 0) {
             snprintf(texto, sizeof(texto), "%d robo(s) novo(s) na frota", novos);
@@ -528,6 +534,10 @@ void *tarefa_organizador(void *arg)
             if (equipes[b].fase != SEM_EQUIPE)
                 acompanhar_equipe(&equipes[b]);
         atribuir_caixas();
+        clock_gettime(CLOCK_MONOTONIC, &fim);
+        pthread_mutex_lock(&mem->mutex_tempos);
+        medir(&mem->med_organizador, proximo, inicio, fim, PERIODO_ORGANIZADOR_MS);
+        pthread_mutex_unlock(&mem->mutex_tempos);
 
         somar_ms(&proximo, PERIODO_ORGANIZADOR_MS);
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &proximo, NULL);

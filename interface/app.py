@@ -29,6 +29,7 @@ from paineis.graficos import PainelGraficos
 from paineis.mapa import PainelMapa
 from paineis.simulacao import PainelSimulacao
 from paineis.robos import PainelDetalhe, PainelRobos
+from paineis.tempos import PainelTempos
 
 PERIODO_TELA_S = 0.2   # mesmo período do atr/status
 
@@ -149,6 +150,7 @@ def pagina():
             eventos = PainelEventos(enviar)
             simulacao = PainelSimulacao(enviar, novo_robo, modo_clique, demonstracao.iniciar)
         graficos = PainelGraficos()
+        tempos = PainelTempos(enviar)    # card "Tempo real" (comando "tempos" a cada 1 s)
     notificador = Notificador()
 
     def atualizar():
@@ -160,6 +162,7 @@ def pagina():
         eventos.atualizar(dados)
         simulacao.atualizar(dados)
         graficos.atualizar(dados)
+        tempos.atualizar(dados)
         notificador.atualizar(dados)
         if selecao["id"] is not None:
             detalhe.atualizar(dados)

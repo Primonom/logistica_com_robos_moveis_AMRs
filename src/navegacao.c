@@ -113,6 +113,10 @@
  *     buffer), as flags parar e ir_recarregar que a Status liga e a flag
  *     bloqueado (esperando célula ou passagem) que a Status publica.
  *   - mem->mapa: só leitura, sem mutex (ver mapa.h).
+ *   - Medição (C, atraso, perdas; ver Medicao em comum.h): gravada no fim
+ *     de cada ciclo em med_navegacao do meu slot, com o mutex do robô
+ *     (travado sozinho); o comando "tempos" lê e zera com o mesmo mutex.
+ *   - Com ATR_TEMPO_REAL=1: SCHED_FIFO prioridade 80 (tempo_real.c).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -849,9 +853,10 @@ static void verificar_recarga(void)
 
 void *tarefa_navegacao(void *arg)
 {
-    struct timespec proximo;
+    struct timespec proximo, inicio, fim;
 
     (void)arg;
+    ativar_tempo_real(PRIO_NAVEGACAO, "navegacao");
     abrir_fila();
     caminho.n = 0;
     /* A célula inicial já foi reservada pelo Gestor, com grupo = meu id. */
@@ -860,6 +865,7 @@ void *tarefa_navegacao(void *arg)
 
     clock_gettime(CLOCK_MONOTONIC, &proximo);
     while (!atomic_load(&mem->encerrar)) {
+        clock_gettime(CLOCK_MONOTONIC, &inicio);
         bloqueado = false;
         ler_mensagens();
         confirmar_chegada();
@@ -876,6 +882,12 @@ void *tarefa_navegacao(void *arg)
             }
         }
         publicar_bloqueado();
+
+        /* Medição do ciclo: com o mutex do meu slot, sozinho. */
+        clock_gettime(CLOCK_MONOTONIC, &fim);
+        pthread_mutex_lock(&mem->robos[id_robo].mutex);
+        medir(&mem->robos[id_robo].med_navegacao, proximo, inicio, fim, PERIODO_NAVEGACAO_MS);
+        pthread_mutex_unlock(&mem->robos[id_robo].mutex);
 
         somar_ms(&proximo, PERIODO_NAVEGACAO_MS);
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &proximo, NULL);

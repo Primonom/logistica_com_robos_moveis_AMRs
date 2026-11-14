@@ -2,7 +2,8 @@
 estado.py — "Loja" de estado da Tela de Operação.
 
 Guarda o que chega pelo MQTT: o último status, o mapa, os últimos eventos,
-a última resposta de comando e se o broker está conectado. Guarda também a
+a última resposta de comando, a última tabela do comando "tempos" (card
+"Tempo real") e se o broker está conectado. Guarda também a
 DIREÇÃO de cada robô (só para o desenho): andando, é a direção do ponto
 atual para o setpoint; parado, continua a última conhecida.
 
@@ -31,6 +32,7 @@ from collections import deque
 SISTEMA_OFFLINE_S = 2.0      # sem atr/status há mais que isso -> "offline"
 MAX_EVENTOS = 500            # guarda só os últimos eventos
 JANELA_ENTREGAS_S = 60.0     # janela para "entregas por minuto"
+INICIO_TEMPOS = "# tempos"   # a resposta do comando "tempos" começa assim
 HISTORICO_S = 300            # histórico de bateria/distância: últimos 5 min
 AMOSTRA_HISTORICO_S = 1.0    # ... com uma amostra por segundo
 
@@ -44,6 +46,7 @@ class Estado:
         self._broker_conectado = False
         self._eventos = deque(maxlen=MAX_EVENTOS)
         self._ultima_resposta = None     # texto de atr/comando/resposta
+        self._tempos = []                # linhas da última resposta do "tempos"
         self._seq_evento = 0             # números de sequência: cada aba sabe o que
         self._seq_resposta = 0           # já mostrou (notificações só do que é novo)
         self._amostras_entregas = deque()  # (instante, entregues) da última janela
@@ -92,6 +95,14 @@ class Estado:
             self._eventos.append(evento)
 
     def guardar_resposta(self, texto):
+        # A tela pede "tempos" a cada 1 s: essa resposta vai só para o card
+        # "Tempo real" e não conta como resposta de comando (não apaga a de
+        # um "historico" que o operador pediu, nem gera notificação).
+        if texto.startswith(INICIO_TEMPOS):
+            linhas = ler_tempos(texto)
+            with self._trava:
+                self._tempos = linhas
+            return
         with self._trava:
             self._seq_resposta += 1
             self._ultima_resposta = texto
@@ -112,6 +123,7 @@ class Estado:
                 "eventos": list(self._eventos),     # os eventos não são alterados depois
                 "ultima_resposta": self._ultima_resposta,
                 "seq_resposta": self._seq_resposta,
+                "tempos": [dict(t) for t in self._tempos],
                 "broker_conectado": self._broker_conectado,
                 "sistema_online": (self._status_em is not None
                                    and agora - self._status_em <= SISTEMA_OFFLINE_S),
@@ -144,3 +156,21 @@ class Estado:
         if t1 - t0 < 1.0:
             return 0.0
         return (e1 - e0) * 60.0 / (t1 - t0)
+
+
+def ler_tempos(texto):
+    """Converte a tabela do comando "tempos" (console.c) em lista de dicts.
+    Linha de dados: nome T ciclos Cmed Cmax atraso_max perdas U."""
+    linhas = []
+    for linha in texto.splitlines():
+        campos = linha.split()
+        if len(campos) != 8 or linha.startswith(("#", "tarefa")):
+            continue
+        try:
+            linhas.append({"tarefa": campos[0], "T": int(campos[1]), "ciclos": int(campos[2]),
+                           "Cmed": float(campos[3]), "Cmax": float(campos[4]),
+                           "atraso_max": float(campos[5]), "perdas": int(campos[6]),
+                           "U": float(campos[7])})
+        except ValueError:
+            continue
+    return linhas

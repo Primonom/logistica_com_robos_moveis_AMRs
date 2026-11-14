@@ -47,6 +47,15 @@ do disco" no painel Eventos.
 Testes: `testes/rodar_todos.sh` (cenários pelo Console, sem precisar do
 broker) e `interface/.venv/bin/python -m pytest -q interface`.
 
+**Tempo real e escalabilidade:** o comando `tempos` mostra, para cada tarefa
+periódica, período, C médio/máximo, atraso máximo, perdas de prazo e
+U = Cmax/T (card "Tempo real" na tela); `tempos zerar` recomeça.
+`ATR_TEMPO_REAL=1` liga SCHED_FIFO com prioridades Rate Monotonic (precisa de
+permissão; no Docker o `compose.yaml` dá `SYS_NICE`). O benchmark
+`testes/escalabilidade.sh` (N = 1 a 64 robôs) e
+`interface/.venv/bin/python testes/analisar_escalabilidade.py` geram
+`docs/ESCALABILIDADE.md` com a resposta "quantos robôs cabem neste hardware".
+
 ## Docker
 
 Requisitos: Docker Desktop com integração WSL 2 habilitada e Docker Compose v2.

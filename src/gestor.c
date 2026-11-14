@@ -33,6 +33,8 @@
  *     mutex_novos, porque Gestor e Organizador são threads diferentes);
  *     o Organizador lê e zera o contador no próximo ciclo dele. Nenhum dos
  *     dois espera pelo outro.
+ *   - Com ATR_TEMPO_REAL=1: SCHED_FIFO prioridade 50, abaixo das periódicas
+ *     (é esporádica; ver tempo_real.c).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,7 +44,8 @@
 #include "comum.h"
 #include "mapa.h"
 
-#define MAX_PEDIDOS 8      /* capacidade da fila circular de pedidos */
+#define MAX_PEDIDOS MAX_ROBOS  /* capacidade da fila circular de pedidos: cabe
+                               * um pedido por robô (o benchmark pede N de uma vez) */
 
 typedef struct { int x, y; } Pedido;
 
@@ -256,6 +259,7 @@ void *tarefa_gestor(void *arg)
     Pedido p;
 
     (void)arg;
+    ativar_tempo_real(PRIO_GESTOR, "gestor");
     while (1) {
         pthread_mutex_lock(&mutex_pedidos);
         /* "while" e não "if": ao acordar, testa a condição de novo

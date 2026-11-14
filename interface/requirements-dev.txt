@@ -6,3 +6,5 @@
 # Testes: interface/.venv/bin/python -m pytest -q interface
 pytest==9.2.0
 playwright==1.63.0
+# Gráficos da análise de escalabilidade (testes/analisar_escalabilidade.py)
+matplotlib==3.10.7

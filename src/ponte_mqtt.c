@@ -68,6 +68,15 @@
  *     pela thread da ponte e lido pelo main depois do pthread_join dela.
  *   - Comandos recebidos: executar_comando() é segura para ser chamada ao
  *     mesmo tempo pelo Console e por aqui (ver console.c).
+ *   - mem->mutex_tempos (PROCESS_SHARED): no fim de cada ciclo grava a
+ *     medição (C, atraso, perdas) em mem->med_ponte; o comando "tempos" lê/
+ *     zera ao mesmo tempo. Travado sozinho.
+ *   - Buffers JSON estáticos (TAMANHO_JSON = 128 KB, grande demais para a
+ *     pilha): json_status é usado SÓ por esta thread e json_mapa SÓ pela
+ *     thread de rede (publicar_mapa roda no callback ao_conectar). Cada um
+ *     tem um único usuário, então não precisam de mutex.
+ *   - Com ATR_TEMPO_REAL=1: SCHED_FIFO prioridade 70 (tempo_real.c). A
+ *     thread de rede da libmosquitto continua SCHED_OTHER.
  *   - Novo robô (atr/robo/novo): pedir_novo_robo() usa a fila de pedidos do
  *     Gestor (mutex_pedidos + cond_pedidos, gestor.c); esta thread é só mais
  *     um produtor, como o Console. Se a fila está cheia, recusa sem bloquear
@@ -85,7 +94,8 @@
 
 #define BROKER_PORTA    1883
 #define MANTER_VIVO_S   10      /* keepalive do MQTT, em segundos */
-#define TAMANHO_JSON    32768   /* cabe 16 robôs (rota de 32 cantos) + 64 caixas com folga */
+#define TAMANHO_JSON    131072  /* cabe 64 robôs (~600 B cada, com a rota de 32 cantos)
+                                 * + 128 caixas (~110 B cada) com folga */
 #define CICLOS_ENTRE_TENTATIVAS 10  /* 10 x 200 ms = tenta conectar a cada 2 s */
 
 static struct mosquitto *cliente = NULL;  /* ver "Sincronização" no topo */
@@ -123,6 +133,10 @@ static void publicar(struct mosquitto *mosq, const char *topico, Json *j, bool r
     /* Sem conexão retorna erro; ignoramos (o núcleo não depende da tela). */
     mosquitto_publish(mosq, NULL, topico, j->usado, j->texto, 0, reter);
 }
+
+/* Buffers estáticos (ver "Sincronização" no topo: um usuário cada). */
+static Json json_mapa;    /* só a thread de rede (ao_conectar) */
+static Json json_status;  /* só a thread da ponte (publicar_status) */
 
 /* ---------- atr/mapa ---------- */
 
@@ -185,30 +199,30 @@ static void json_passagens_mapa(Json *j)
 /* Monta o JSON do mapa a partir de mem->mapa e das constantes de mapa.h. */
 static void publicar_mapa(struct mosquitto *mosq)
 {
-    Json j;
+    Json *j = &json_mapa;
     int i;
 
-    j.usado = 0;
-    json_add(&j, "{\"largura\":%d,\"altura\":%d,\"semente\":%u,\"corredor_y\":%d,\"baias\":[",
+    j->usado = 0;
+    json_add(j, "{\"largura\":%d,\"altura\":%d,\"semente\":%u,\"corredor_y\":%d,\"baias\":[",
              MAPA_LARGURA, MAPA_ALTURA, mem->mapa.semente, CORREDOR_Y);
     for (i = 0; i < N_BAIAS; i++)
-        json_add(&j, "{\"id\":%d,\"x\":%d,\"y\":%d}%s", i + 1, BAIA_X[i], BAIA_Y[i],
+        json_add(j, "{\"id\":%d,\"x\":%d,\"y\":%d}%s", i + 1, BAIA_X[i], BAIA_Y[i],
                  i < N_BAIAS - 1 ? "," : "");
-    json_add(&j, "],\"zonas\":[");
+    json_add(j, "],\"zonas\":[");
     for (i = 0; i < N_ZONAS; i++)
-        json_add(&j, "{\"id\":\"%c\",\"x\":%d,\"y\":%d}%s", 'A' + i, ZONA_X[i], ZONA_Y[i],
+        json_add(j, "{\"id\":\"%c\",\"x\":%d,\"y\":%d}%s", 'A' + i, ZONA_X[i], ZONA_Y[i],
                  i < N_ZONAS - 1 ? "," : "");
-    json_add(&j, "],\"estacoes\":[");
+    json_add(j, "],\"estacoes\":[");
     for (i = 0; i < N_ESTACOES; i++)
-        json_add(&j, "{\"x\":%d,\"y\":%d}%s", ESTACAO_X[i], ESTACAO_Y[i],
+        json_add(j, "{\"x\":%d,\"y\":%d}%s", ESTACAO_X[i], ESTACAO_Y[i],
                  i < N_ESTACOES - 1 ? "," : "");
-    json_add(&j, "]");
-    json_paredes(&j);
-    json_obstaculos(&j);
-    json_passagens_mapa(&j);
-    json_add(&j, "}");
+    json_add(j, "]");
+    json_paredes(j);
+    json_obstaculos(j);
+    json_passagens_mapa(j);
+    json_add(j, "}");
 
-    publicar(mosq, "atr/mapa", &j, true);  /* retained */
+    publicar(mosq, "atr/mapa", j, true);  /* retained */
 }
 
 /* ---------- atr/status ---------- */
@@ -334,7 +348,7 @@ static void json_passagens(Json *j)
 
 static void publicar_status(struct mosquitto *mosq)
 {
-    Json j;
+    Json *j = &json_status;
     Caixa caixas[MAX_CAIXAS];
     struct timespec agora;
     char data_hora[48];
@@ -343,19 +357,19 @@ static void publicar_status(struct mosquitto *mosq)
     clock_gettime(CLOCK_REALTIME, &agora);
     formatar_data_hora(agora, data_hora, sizeof(data_hora));
 
-    j.usado = 0;
-    json_add(&j, "{\"t\":\"%s\",", data_hora);
+    j->usado = 0;
+    json_add(j, "{\"t\":\"%s\",", data_hora);
     n_caixas = copiar_caixas(caixas, &em_espera, &livres);
-    ativos = json_robos(&j, caixas, n_caixas);
-    json_caixas(&j, caixas, n_caixas, &pendentes, &andamento, &entregues);
-    json_passagens(&j);
-    json_add(&j, ",\"organizador\":{\"caixa_em_espera\":%d,\"robos_livres\":%d}",
+    ativos = json_robos(j, caixas, n_caixas);
+    json_caixas(j, caixas, n_caixas, &pendentes, &andamento, &entregues);
+    json_passagens(j);
+    json_add(j, ",\"organizador\":{\"caixa_em_espera\":%d,\"robos_livres\":%d}",
              em_espera, livres);
-    json_add(&j, ",\"contadores\":{\"robos_ativos\":%d,\"entregues\":%d,"
+    json_add(j, ",\"contadores\":{\"robos_ativos\":%d,\"entregues\":%d,"
              "\"pendentes\":%d,\"em_andamento\":%d}}",
              ativos, entregues, pendentes, andamento);
 
-    publicar(mosq, "atr/status", &j, false);
+    publicar(mosq, "atr/status", j, false);
 }
 
 /* ---------- Conexão ---------- */
@@ -432,7 +446,9 @@ static void ao_receber(struct mosquitto *mosq, void *dados,
     } else {
         ok = executar_comando(linha, resp, sizeof(resp));
         snprintf(texto, sizeof(texto), "%s%s", ok ? "" : "erro: ", resp);
-        printf("Ponte MQTT: comando \"%s\" -> %s\n", linha, ok ? "ok" : resp);
+        /* "tempos" chega da tela a cada 1 s: não enche o terminal com ele. */
+        if (strcmp(linha, "tempos") != 0)
+            printf("Ponte MQTT: comando \"%s\" -> %s\n", linha, ok ? "ok" : resp);
     }
     mosquitto_publish(mosq, NULL, "atr/comando/resposta", strlen(texto), texto, 0, false);
 }
@@ -504,19 +520,25 @@ static bool tentar_conectar(struct mosquitto *mosq, bool *avisou)
 
 void *tarefa_ponte_mqtt(void *arg)
 {
-    struct timespec proximo;
+    struct timespec proximo, inicio, fim;
     bool avisou = false;
     int ciclo = 0;
 
     (void)arg;
+    ativar_tempo_real(PRIO_PONTE, "ponte_mqtt");
 
     clock_gettime(CLOCK_MONOTONIC, &proximo);
     while (!atomic_load(&mem->encerrar)) {
+        clock_gettime(CLOCK_MONOTONIC, &inicio);
         if (!rede_iniciada && ciclo % CICLOS_ENTRE_TENTATIVAS == 0)
             rede_iniciada = tentar_conectar(cliente, &avisou);
         if (rede_iniciada)
             publicar_status(cliente);
         ciclo++;
+        clock_gettime(CLOCK_MONOTONIC, &fim);
+        pthread_mutex_lock(&mem->mutex_tempos);
+        medir(&mem->med_ponte, proximo, inicio, fim, PERIODO_PONTE_MS);
+        pthread_mutex_unlock(&mem->mutex_tempos);
         somar_ms(&proximo, PERIODO_PONTE_MS);
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &proximo, NULL);
     }

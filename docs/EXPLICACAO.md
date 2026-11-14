@@ -3,8 +3,10 @@
 Este documento explica, para o relatório e a entrevista, **cada mecanismo de
 sincronização** do sistema: onde ele está, que problema resolve e o que
 aconteceria sem ele. A seção 7 explica o **ponto extra +3** (mapa aleatório e
-IA de rotas com A*) e a seção 8 o **ponto extra +2** (anti-colisão
-descentralizada). No fim estão as **simplificações assumidas**.
+IA de rotas com A*), a seção 8 o **ponto extra +2** (anti-colisão
+descentralizada) e a seção 5.1 a **medição de tempo real** (a análise de
+escalabilidade com os números está em `docs/ESCALABILIDADE.md`). No fim estão
+as **simplificações assumidas**.
 
 ---
 
@@ -46,6 +48,9 @@ Processo central "logistica"                 Processo "robo <id>" (um por robô)
 | `estado_local` | struct + mutex comum | `robo_main.c` | Navegação ↔ Status |
 | `mem->ocupacao` (grade de ocupação) | matriz + 1 mutex `PTHREAD_PROCESS_SHARED` | `memoria.c` | Navegação de cada robô; Gestor (célula inicial) |
 | `mem->monitor[4]` (mão única das passagens) | monitor: mutex `PTHREAD_PROCESS_SHARED` + estado | `memoria.c` | Navegação (entra/sai); A* e Ponte (só leem) |
+| `mutex_tempos` + `med_simulador/organizador/ponte` | mutex `PTHREAD_PROCESS_SHARED` + medições | `memoria.c` | Simulador, Organizador, Ponte (gravam); comando `tempos` (lê/zera) |
+| `Robo.med_navegacao/med_status` | medições no slot (mutex do robô) | `memoria.c` (zeradas) | Navegação e Status (gravam); `tempos` |
+| `avisou` (`tempo_real.c`) | `atomic_bool` por processo | `tempo_real.c` | threads que pedem SCHED_FIFO |
 
 **Regra geral contra deadlock:** em nenhum ponto do código uma thread segura
 dois mutexes ao mesmo tempo. Cada `pthread_mutex_lock` é seguido do
@@ -378,6 +383,72 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
 - **`CLOCK_MONOTONIC`:** não pula se o relógio do sistema for ajustado.
 - (`mq_timedreceive` e `sem_timedwait` usam `CLOCK_REALTIME` porque a
   interface POSIX deles exige.)
+
+### 5.1 Medição de tempo de cada tarefa periódica (`Medicao`, `medir`)
+- **Onde:** `struct Medicao` e `medir()` (inline) em `comum.h`, chamada no fim
+  de cada ciclo da Navegação, Status, Organizador, Simulador e Ponte MQTT.
+  Comando `tempos` / `tempos zerar` (`console.c`), card "Tempo real" da tela
+  (`interface/paineis/tempos.py`, pede `tempos` a cada 1 s).
+- **Como:** `inicio = clock_gettime(CLOCK_MONOTONIC)` logo ao acordar;
+  `atraso = inicio − proximo` (instante planejado); depois do trabalho
+  `fim`, `C = fim − inicio`; **perda de prazo** se `fim > proximo + T`
+  (deadline = período). Guarda n de ciclos, C médio (média incremental, sem
+  vetor de amostras), C máximo, atraso máximo e perdas. O `fim` é tirado
+  ANTES de travar o mutex da medição (esperar esse mutex não conta como C).
+- **Onde fica cada `Medicao` e quem protege:**
+  - Simulador, Organizador, Ponte: `mem->med_*` na memória compartilhada,
+    protegidas por **`mem->mutex_tempos`** (novo, `PROCESS_SHARED`).
+    *Problema:* a tarefa grava enquanto o `tempos` (Console ou thread de rede
+    do MQTT) lê ou zera. *Sem ele:* a tabela poderia misturar campos de dois
+    ciclos (double não é atômico) e um `zerar` no meio de um `medir` deixaria
+    média e n_ciclos inconsistentes.
+  - Navegação e Status: `med_navegacao` / `med_status` dentro do slot do
+    robô, protegidas pelo **mutex do robô** (o que essas tarefas já usam).
+  - Regra anti-deadlock mantida: `medir` é feito com UM mutex só; o `tempos`
+    copia as centrais com `mutex_tempos` e cada robô com o mutex dele, um
+    por vez, e monta o texto depois.
+- **`tempos`:** para Navegação e Status mostra o **pior caso** entre os
+  robôs (maior C médio, maior C máximo, maior atraso; ciclos e perdas
+  somados) e `U = Cmax/T`.
+- **`medir_falha <id>`** (só Console): latência ponta a ponta de um evento
+  crítico. Liga `hw.i_falha` (como o comando `falha`) e consulta o
+  `e_estado` do **buffer** a cada 1 ms até ver `DEFEITO`; imprime o tempo.
+- **Na tela:** a resposta do `tempos` chega pelo mesmo `atr/comando/resposta`;
+  o `estado.py` reconhece o começo `# tempos` e a guarda à parte (não apaga a
+  resposta de outro comando nem gera notificação). A ponte não imprime esse
+  comando no terminal (chegaria 1 vez por segundo).
+
+### 5.2 Prioridades de tempo real (opcional, `ATR_TEMPO_REAL=1`)
+- **Onde:** `ativar_tempo_real()` em `tempo_real.c`, chamada por cada thread
+  no início (para ela mesma); prioridades `PRIO_*` em `comum.h`.
+- **Como:** `pthread_setschedparam(pthread_self(), SCHED_FIFO, prio)` com
+  **Rate Monotonic** (menor período = maior prioridade): Navegação e
+  Simulador 80 (100 ms), Status e Ponte 70 (200 ms), Organizador 60 (500 ms),
+  Coletor e Gestor 50 (esporádicas, abaixo das periódicas). O robô herda a
+  variável pelo `execl`. Console e thread de rede da libmosquitto ficam em
+  SCHED_OTHER.
+- **Sem permissão** (usuário comum, `ulimit -r` = 0): `EPERM`; imprime o aviso
+  **uma vez por processo** e segue em SCHED_OTHER. No Docker, o
+  `compose.yaml` dá `cap_add: [SYS_NICE]` ao serviço `logistica`.
+- **Mecanismo novo:** `static atomic_bool avisou` + `atomic_exchange`.
+  *Problema:* várias threads do mesmo processo falham ao mesmo tempo.
+  *Sem ele:* com `bool` comum seria condição de corrida e o aviso podia
+  sair repetido; `atomic_exchange` testa e marca numa operação só.
+- **Por que opcional:** SCHED_FIFO numa máquina compartilhada pode tomar a
+  CPU de tudo; por padrão o sistema roda como antes.
+
+### 5.3 Limites para 64 robôs (`MAX_ROBOS = 64`)
+- `MAX_CAIXAS` = 128 (o benchmark põe 2 caixas por robô); `MAX_PEDIDOS` do
+  Gestor = `MAX_ROBOS` (o benchmark pede N robôs de uma vez).
+- Ponte: `TAMANHO_JSON` = 128 KB (≈600 B por robô com a rota + ≈110 B por
+  caixa). Grande demais para a pilha, então os dois buffers são **estáticos**:
+  `json_status` (só a thread da ponte) e `json_mapa` (só a thread de rede,
+  callback `ao_conectar`). Cada um tem um único usuário → sem mutex.
+- Filas POSIX: 64 `/atr_robo_*` + `/atr_coletor` = 65 filas; o limite do
+  sistema é `/proc/sys/fs/mqueue/queues_max` = 256 e cada fila (10 mensagens
+  de 40 B ou 152 B) gasta ≈1–2 KB do `RLIMIT_MSGQUEUE` (`ulimit -q` = 800 KB
+  por usuário): ≈70 KB no total. `msg_max` = 10 continua valendo.
+- `TAMANHO_RESPOSTA` (32 KB) não mudou: o `status` com 64 robôs tem ≈6 KB.
 
 ---
 
@@ -853,7 +924,7 @@ replanejamento ocasional do desvio (um A*, só quando trava).
 **Infraestrutura**
 20. `mq_send` bloqueia se a fila estiver cheia (10 mensagens): uma tarefa
     poderia esperar o Coletor ou a Navegação de um robô esvaziar a fila.
-21. Fila de pedidos de novo robô cheia (8) → pedido recusado.
+21. Fila de pedidos de novo robô cheia (`MAX_PEDIDOS` = `MAX_ROBOS` = 64) → pedido recusado.
 22. Ctrl+C usa o comportamento padrão do `SIGINT` (mata tudo, sem limpeza);
     as sobras de IPC são removidas na próxima inicialização.
 23. `historico` lê o arquivo inteiro a cada pedido para pegar as últimas
@@ -875,6 +946,18 @@ replanejamento ocasional do desvio (um A*, só quando trava).
 27. Na tela (painel Eventos), os registros de carga "id;baia;zona;robôs"
     viram "Caixa 4: baia 2 → zona D (robôs 0)" só na exibição
     (`cores.texto_evento`); o `logs/cargas.csv` continua no formato cru.
+
+**Medição de tempo real**
+28. O C medido é tempo de PAREDE entre o início e o fim do ciclo (inclui
+    preempção por outras threads e esperas por mutex dentro do ciclo), não
+    tempo de CPU; é o que importa para o prazo, mas superestima o WCET.
+29. O "pior caso" de Navegação e Status no `tempos` junta máximos de robôs
+    diferentes (o C médio mostrado é a maior média entre os robôs).
+30. `medir_falha` tem resolução de 1 ms e mede até `DEFEITO` aparecer no
+    buffer (não até o robô parar fisicamente, que leva até mais 100 ms).
+31. Com `ATR_TEMPO_REAL=1` só as threads do sistema mudam de política; o
+    Console e a thread de rede do MQTT continuam SCHED_OTHER.
+32. Com 64 robôs a Tela de Operação fica pesada (o benchmark roda sem ela).
 
 ---
 

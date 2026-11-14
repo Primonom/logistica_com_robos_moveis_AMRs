@@ -1,0 +1,62 @@
+# data: 2026-11-14 18:28:32
+# nproc: 12
+# cpu: 13th Gen Intel(R) Core(TM) i5-13420H
+# uname: Linux PabloReis 6.18.58.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Tue Oct 27 00:24:11 UTC 2026 x86_64 GNU/Linux
+# modo: normal (ATR_TEMPO_REAL=0); ulimit -r = 0
+Mapa gerado com semente 42
+  P1: parede 1, y = 12, x 12..17, capacidade 4
+  P2: parede 1, y = 20, x 12..17, capacidade 2
+  P3: parede 2, y = 13, x 27..32, capacidade 1
+  P4: parede 3, y = 24, x 42..47, capacidade 3
+Gestor: robo 0 criado (pid 14593) em (8,15)
+Ponte MQTT: conectada ao broker localhost:1883
+Gestor: (8,15) ocupada; robo 1 criado (pid 14595) em (9,15)
+Organizador: 2 robo(s) novo(s) na frota
+Robo 0 vivo (pid 14593)
+Robo 1 vivo (pid 14595)
+Organizador: caixa 1 (tam 1, baia 1 -> zona A): robos 0 indo para a baia
+Organizador: caixa 2 (tam 2) aguardando equipe: 1 robo(s) livre(s)
+Organizador: caixa 1: equipe completa na baia, ACOPLAR
+Organizador: caixa 1: erguida por todos, IR_ZONA A (lider 0)
+Organizador: caixa 1 entregue na zona A (robos 0)
+Organizador: caixa 2 (tam 2, baia 2 -> zona A): robos 1 0 indo para a baia
+Organizador: caixa 3 (tam 1) aguardando equipe: 0 robo(s) livre(s)
+Organizador: caixa 2: equipe completa na baia, ACOPLAR
+Organizador: caixa 2: erguida por todos, IR_ZONA A (lider 1)
+Organizador: caixa 2 entregue na zona A (robos 1 0)
+Organizador: caixa 3 (tam 1, baia 3 -> zona A): robos 1 indo para a baia
+Organizador: robo 0 sem bateria para a caixa 4: RECARREGAR
+Organizador: caixa 4 (tam 2) aguardando equipe: 0 robo(s) livre(s)
+Organizador: caixa 3: equipe completa na baia, ACOPLAR
+Organizador: caixa 3: erguida por todos, IR_ZONA A (lider 1)
+Organizador: caixa 3 entregue na zona A (robos 1)
+Organizador: robo 1 sem bateria para a caixa 4: RECARREGAR
+Organizador: caixa 4 (tam 2, baia 4 -> zona A): robos 0 1 indo para a baia
+# tempos (T em ms; C e atraso em us; U = Cmax/T)
+tarefa          T   ciclos      Cmed      Cmax  atraso_max  perdas        U
+navegacao     100     1200      26.8    2270.0       515.8       0   0.0227
+status        200      600     239.0    3522.6       559.5       0   0.0176
+simulador     100      600      10.0      61.3       515.4       0   0.0006
+organizador   500      120    3483.6   14670.2       346.7       0   0.0293
+ponte_mqtt    200      300      64.3     343.4       322.3       0   0.0017
+robos ativos: 2 (navegacao e status: pior caso entre eles)
+id  pid     estado             pos      sp       bat   dist  modo  carga
+0   14593   DESLOCANDO         (32,25)  (32,25)   99%   338  auto  4
+1   14595   DESLOCANDO         (34,25)  (34,25)   99%   333  auto  4
+caixa 4   tam 2  baia 4 -> zona A  em andamento
+caixas entregues: 3
+latencia_falha robo 0: 5.4 ms
+latencia_falha robo 1: 99.7 ms
+Organizador: caixa 4: robo da equipe em DEFEITO, PAUSAR
+latencia_falha robo 0: 77.9 ms
+latencia_falha robo 1: 61.0 ms
+Organizador: caixa 4: defeito resolvido, CONTINUAR
+latencia_falha robo 0: 37.0 ms
+latencia_falha robo 1: 21.0 ms
+latencia_falha robo 0: 196.5 ms
+latencia_falha robo 1: 180.7 ms
+latencia_falha robo 0: 157.1 ms
+Organizador: caixa 4: robo da equipe em DEFEITO, PAUSAR
+latencia_falha robo 1: 140.7 ms
+Encerrando...
+Fim.

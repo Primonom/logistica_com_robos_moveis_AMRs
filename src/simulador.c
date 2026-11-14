@@ -33,6 +33,10 @@
  *     também pelo processo robo (Status e Navegação) e pelo Console; o mutex
  *     garante que x, y, bateria etc. mudem juntos (ninguém lê pela metade).
  *   - clock_nanosleep com tempo absoluto para o período (ver somar_ms).
+ *   - mem->mutex_tempos (PROCESS_SHARED): no fim de cada ciclo grava a
+ *     medição (C, atraso, perdas) em mem->med_simulador; o comando "tempos"
+ *     lê/zera ao mesmo tempo. Travado sozinho (nenhum mutex de robô junto).
+ *   - Com ATR_TEMPO_REAL=1: SCHED_FIFO prioridade 80 (tempo_real.c).
  *   - celulas_andadas[] e em_colisao[][] só são usados por esta thread:
  *     não precisam de mutex.
  *   - conferir colisões: um mutex de robô por vez (copia x, y e grupo
@@ -113,12 +117,14 @@ static void conferir_colisoes(void)
 
 void *tarefa_simulador(void *arg)
 {
-    struct timespec proximo;
+    struct timespec proximo, inicio, fim;
     int i;
 
     (void)arg;
+    ativar_tempo_real(PRIO_SIMULADOR, "simulador");
     clock_gettime(CLOCK_MONOTONIC, &proximo);
     while (!atomic_load(&mem->encerrar)) {
+        clock_gettime(CLOCK_MONOTONIC, &inicio);
         for (i = 0; i < MAX_ROBOS; i++) {
             pthread_mutex_lock(&mem->robos[i].mutex);
             if (mem->robos[i].ativo)
@@ -126,6 +132,11 @@ void *tarefa_simulador(void *arg)
             pthread_mutex_unlock(&mem->robos[i].mutex);
         }
         conferir_colisoes();
+        clock_gettime(CLOCK_MONOTONIC, &fim);
+        pthread_mutex_lock(&mem->mutex_tempos);
+        medir(&mem->med_simulador, proximo, inicio, fim, PERIODO_SIMULADOR_MS);
+        pthread_mutex_unlock(&mem->mutex_tempos);
+
         somar_ms(&proximo, PERIODO_SIMULADOR_MS);
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &proximo, NULL);
     }

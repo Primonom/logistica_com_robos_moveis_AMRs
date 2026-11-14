@@ -35,22 +35,22 @@ Mapa (semente 5):
 .............####........o..####.....o.....####...o.........
 .............####.o.......o.####...o.E.....####.o...........
 ......o......####..........o####...........####.............
-Gestor: robo 0 criado (pid 12062) em (9,20)
-Gestor: robo 1 criado (pid 12063) em (7,20)
-Robo 0 vivo (pid 12062)
-Robo 1 vivo (pid 12063)
+Gestor: robo 0 criado (pid 16476) em (9,20)
+Gestor: robo 1 criado (pid 16477) em (7,20)
+Robo 0 vivo (pid 16476)
+Robo 1 vivo (pid 16477)
 Console: robo 1 em DISPONIVEL
 Console: robo 0 em MANUAL
 Console: robo 1 em MANUAL
 Organizador: 2 robo(s) novo(s) na frota
 Console: robo 0 em DEFEITO
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   12062   DEFEITO            (14,20)  (14,20)    0%     5  man   -1
-1   12063   MANUAL             (11,20)  (11,20)  100%     4  man   -1
+0   16476   DEFEITO            (14,20)  (14,20)    0%     5  man   -1
+1   16477   MANUAL             (11,20)  (11,20)  100%     4  man   -1
 caixas entregues: 0
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   12062   DEFEITO            (14,20)  (14,20)    0%     5  man   -1
-1   12063   MANUAL             (22,13)  (22,13)   96%    24  man   -1
+0   16476   DEFEITO            (14,20)  (14,20)    0%     5  man   -1
+1   16477   MANUAL             (22,13)  (22,13)   96%    24  man   -1
 caixas entregues: 0
 Encerrando...
 Fim.

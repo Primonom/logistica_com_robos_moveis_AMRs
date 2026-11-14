@@ -6,7 +6,7 @@ Rodar da raiz do repositório:
 import threading
 import unittest
 
-from estado import Estado
+from estado import Estado, ler_tempos
 
 
 def status(entregues=0, robos=None):
@@ -127,6 +127,25 @@ class TestEstado(unittest.TestCase):
         for t in threads:
             t.join()
         self.assertEqual(erros, [])
+
+    def test_tempos_vai_para_o_card_e_nao_para_a_resposta(self):
+        texto = ("# tempos (T em ms; C e atraso em us; U = Cmax/T)\n"
+                 "tarefa          T   ciclos      Cmed      Cmax  atraso_max  perdas        U\n"
+                 "navegacao     100       60     183.2    4313.4       645.4       0   0.0431\n"
+                 "organizador   500        6     389.4    1742.2       411.1       2   0.0035\n"
+                 "robos ativos: 2 (navegacao e status: pior caso entre eles)\n")
+        e = Estado()
+        e.guardar_resposta("ok")
+        e.guardar_resposta(texto)
+        d = e.copia()
+        self.assertEqual(d["ultima_resposta"], "ok")      # não apagou a resposta anterior
+        self.assertEqual(d["seq_resposta"], 1)            # nem gerou notificação
+        self.assertEqual([t["tarefa"] for t in d["tempos"]], ["navegacao", "organizador"])
+        self.assertEqual(d["tempos"][1]["perdas"], 2)
+        self.assertAlmostEqual(d["tempos"][0]["Cmax"], 4313.4)
+
+    def test_ler_tempos_ignora_lixo(self):
+        self.assertEqual(ler_tempos("# tempos\nnada aqui\n"), [])
 
 
 if __name__ == "__main__":

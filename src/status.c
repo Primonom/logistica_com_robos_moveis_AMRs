@@ -31,6 +31,10 @@
  *     simulador (outro processo) escreve no hw enquanto esta thread lê, e o
  *     Console/Organizador leem o buffer enquanto ela escreve; o mutex
  *     garante que o buffer inteiro mude de uma vez (retrato consistente).
+ *   - Medição (C, atraso, perdas; ver Medicao em comum.h): gravada em
+ *     r->med_status no fim do ciclo, com o mutex do robô (o mesmo de cima;
+ *     o comando "tempos" lê e zera com ele).
+ *   - Com ATR_TEMPO_REAL=1: SCHED_FIFO prioridade 70 (tempo_real.c).
  *   - Os dois mutexes nunca são segurados ao mesmo tempo: não há risco de
  *     deadlock por ordem de travamento.
  *   - clock_nanosleep com tempo absoluto para o período (ver somar_ms).
@@ -144,15 +148,17 @@ static void atualizar_buffer(Robo *r, Estado estado, int destino_x, int destino_
 void *tarefa_status(void *arg)
 {
     Robo *r = &mem->robos[id_robo];
-    struct timespec proximo;
+    struct timespec proximo, inicio, fim;
     bool falha, bloqueado;
     int bateria, carga_id, x, y, destino_x, destino_y, k, passos, ex, ey;
     Estado estado;
     CopiaRota rota;
 
     (void)arg;
+    ativar_tempo_real(PRIO_STATUS, "status");
     clock_gettime(CLOCK_MONOTONIC, &proximo);
     while (!atomic_load(&mem->encerrar)) {
+        clock_gettime(CLOCK_MONOTONIC, &inicio);
         /* 1) Lê o que precisa do hw e do slot. */
         pthread_mutex_lock(&r->mutex);
         falha = r->hw.i_falha;
@@ -186,6 +192,13 @@ void *tarefa_status(void *arg)
 
         pthread_mutex_lock(&r->mutex);
         atualizar_buffer(r, estado, destino_x, destino_y, &rota, bloqueado);
+        pthread_mutex_unlock(&r->mutex);
+
+        /* Medição do ciclo (fim tirado fora do mutex: esperar o mutex para
+         * gravar a medição não conta como tempo de execução). */
+        clock_gettime(CLOCK_MONOTONIC, &fim);
+        pthread_mutex_lock(&r->mutex);
+        medir(&r->med_status, proximo, inicio, fim, PERIODO_STATUS_MS);
         pthread_mutex_unlock(&r->mutex);
 
         somar_ms(&proximo, PERIODO_STATUS_MS);

@@ -1,13 +1,13 @@
-2026-11-14 18:01:09.148;-1;sistema iniciado
-2026-11-14 18:01:09.148;-1;mapa gerado com semente 42
-2026-11-14 18:01:09.150;0;robo criado (pid 12448) em (1,15)
-2026-11-14 18:01:09.151;1;robo criado (pid 12449) em (11,15)
-2026-11-14 18:01:09.155;-1;2 robo(s) novo(s) na frota
-2026-11-14 18:01:09.160;1;robo vivo
-2026-11-14 18:01:09.161;0;robo vivo
-2026-11-14 18:01:09.260;1;modo manual
-2026-11-14 18:01:09.262;0;modo manual
-2026-11-14 18:01:10.960;1;desviando de robo
-2026-11-14 18:01:11.660;1;chegou ao destino
-2026-11-14 18:01:11.662;0;chegou ao destino
-2026-11-14 18:01:16.653;-1;sistema encerrado
+2026-11-14 18:47:16.373;-1;sistema iniciado
+2026-11-14 18:47:16.373;-1;mapa gerado com semente 42
+2026-11-14 18:47:16.375;0;robo criado (pid 16587) em (1,15)
+2026-11-14 18:47:16.377;1;robo criado (pid 16588) em (11,15)
+2026-11-14 18:47:16.383;-1;2 robo(s) novo(s) na frota
+2026-11-14 18:47:16.385;0;robo vivo
+2026-11-14 18:47:16.386;1;robo vivo
+2026-11-14 18:47:16.485;0;modo manual
+2026-11-14 18:47:16.487;1;modo manual
+2026-11-14 18:47:18.087;1;desviando de robo
+2026-11-14 18:47:18.786;0;chegou ao destino
+2026-11-14 18:47:18.887;1;chegou ao destino
+2026-11-14 18:47:23.878;-1;sistema encerrado

@@ -1,109 +1,109 @@
-2026-11-14 18:01:26.596;-1;sistema iniciado
-2026-11-14 18:01:26.596;-1;mapa gerado com semente 42
-2026-11-14 18:01:26.597;0;robo criado (pid 12510) em (8,15)
-2026-11-14 18:01:26.599;1;robo criado (pid 12511) em (9,15)
-2026-11-14 18:01:26.601;2;robo criado (pid 12512) em (7,15)
-2026-11-14 18:01:26.602;-1;2 robo(s) novo(s) na frota
-2026-11-14 18:01:26.604;3;robo criado (pid 12513) em (8,16)
-2026-11-14 18:01:26.604;0;robo vivo
-2026-11-14 18:01:26.605;1;robo vivo
-2026-11-14 18:01:26.606;4;robo criado (pid 12518) em (8,14)
-2026-11-14 18:01:26.607;2;robo vivo
-2026-11-14 18:01:26.624;5;robo criado (pid 12521) em (10,15)
-2026-11-14 18:01:26.625;4;robo vivo
-2026-11-14 18:01:26.626;3;robo vivo
-2026-11-14 18:01:26.629;5;robo vivo
-2026-11-14 18:01:27.105;-1;4 robo(s) novo(s) na frota
-2026-11-14 18:01:27.111;-1;caixa 1 (tam 1, baia 1 -> zona D): robos 2 indo para a baia
-2026-11-14 18:01:27.115;-1;caixa 2 (tam 1, baia 2 -> zona C): robos 4 indo para a baia
-2026-11-14 18:01:27.120;-1;caixa 3 (tam 1, baia 3 -> zona B): robos 3 indo para a baia
-2026-11-14 18:01:27.125;4;tarefa: ir para a baia (caixa 2)
-2026-11-14 18:01:27.126;-1;caixa 4 (tam 1, baia 4 -> zona A): robos 0 indo para a baia
-2026-11-14 18:01:27.126;3;tarefa: ir para a baia (caixa 3)
-2026-11-14 18:01:27.205;0;tarefa: ir para a baia (caixa 4)
-2026-11-14 18:01:27.207;2;tarefa: ir para a baia (caixa 1)
-2026-11-14 18:01:27.826;3;chegou ao destino
-2026-11-14 18:01:27.926;4;chegou ao destino
-2026-11-14 18:01:28.104;-1;caixa 2: equipe completa na baia, ACOPLAR
-2026-11-14 18:01:28.106;-1;caixa 3: equipe completa na baia, ACOPLAR
-2026-11-14 18:01:28.226;4;carga erguida
-2026-11-14 18:01:28.227;3;carga erguida
-2026-11-14 18:01:28.600;-1;caixa 2: erguida por todos, IR_ZONA C (lider 4)
-2026-11-14 18:01:28.602;-1;caixa 3: erguida por todos, IR_ZONA B (lider 3)
-2026-11-14 18:01:28.905;0;chegou ao destino
-2026-11-14 18:01:28.907;2;chegou ao destino
-2026-11-14 18:01:29.104;-1;caixa 1: equipe completa na baia, ACOPLAR
-2026-11-14 18:01:29.106;-1;caixa 4: equipe completa na baia, ACOPLAR
-2026-11-14 18:01:29.205;0;carga erguida
-2026-11-14 18:01:29.207;2;carga erguida
-2026-11-14 18:01:29.526;4;entrou na passagem P1 (para a direita)
-2026-11-14 18:01:29.601;-1;caixa 1: erguida por todos, IR_ZONA D (lider 2)
-2026-11-14 18:01:29.603;-1;caixa 4: erguida por todos, IR_ZONA A (lider 0)
-2026-11-14 18:01:30.026;3;entrou na passagem P1 (para a direita)
-2026-11-14 18:01:30.225;4;saiu da passagem P1
-2026-11-14 18:01:30.726;3;saiu da passagem P1
-2026-11-14 18:01:30.905;0;entrou na passagem P2 (para a direita)
-2026-11-14 18:01:31.207;2;entrou na passagem P1 (para a direita)
-2026-11-14 18:01:31.325;4;entrou na passagem P3 (para a direita)
-2026-11-14 18:01:31.605;0;saiu da passagem P2
-2026-11-14 18:01:31.826;3;esperando passagem P3 (cheia ou na contramao)
-2026-11-14 18:01:31.907;2;saiu da passagem P1
-2026-11-14 18:01:32.025;4;saiu da passagem P3
-2026-11-14 18:01:32.026;3;entrou na passagem P3 (para a direita)
-2026-11-14 18:01:32.726;3;saiu da passagem P3
-2026-11-14 18:01:33.007;2;entrou na passagem P3 (para a direita)
-2026-11-14 18:01:33.305;0;esperando passagem P3 (cheia ou na contramao)
-2026-11-14 18:01:33.707;2;saiu da passagem P3
-2026-11-14 18:01:33.805;0;entrou na passagem P3 (para a direita)
-2026-11-14 18:01:33.925;4;entrou na passagem P4 (para a direita)
-2026-11-14 18:01:34.505;0;saiu da passagem P3
-2026-11-14 18:01:34.625;4;saiu da passagem P4
-2026-11-14 18:01:34.626;3;entrou na passagem P4 (para a direita)
-2026-11-14 18:01:35.326;3;saiu da passagem P4
-2026-11-14 18:01:35.607;2;entrou na passagem P4 (para a direita)
-2026-11-14 18:01:36.025;4;chegou ao destino
-2026-11-14 18:01:36.103;-1;caixa 2 entregue na zona C (robos 4)
-2026-11-14 18:01:36.125;4;carga solta
-2026-11-14 18:01:36.307;2;saiu da passagem P4
-2026-11-14 18:01:36.405;0;entrou na passagem P4 (para a direita)
-2026-11-14 18:01:37.105;0;saiu da passagem P4
-2026-11-14 18:01:37.207;2;chegou ao destino
-2026-11-14 18:01:37.426;3;chegou ao destino
-2026-11-14 18:01:37.602;-1;caixa 1 entregue na zona D (robos 2)
-2026-11-14 18:01:37.604;-1;caixa 3 entregue na zona B (robos 3)
-2026-11-14 18:01:37.607;2;carga solta
-2026-11-14 18:01:37.612;-1;caixa 5 (tam 1, baia 1 -> zona B): robos 1 indo para a baia
-2026-11-14 18:01:37.626;3;carga solta
-2026-11-14 18:01:37.705;1;tarefa: ir para a baia (caixa 5)
-2026-11-14 18:01:39.405;1;chegou ao destino
-2026-11-14 18:01:39.905;0;chegou ao destino
-2026-11-14 18:01:40.104;-1;caixa 5: equipe completa na baia, ACOPLAR
-2026-11-14 18:01:40.105;0;carga solta
-2026-11-14 18:01:40.106;-1;caixa 4 entregue na zona A (robos 0)
-2026-11-14 18:01:40.117;-1;caixa 6 (tam 1, baia 4 -> zona C): robos 5 indo para a baia
-2026-11-14 18:01:40.129;5;tarefa: ir para a baia (caixa 6)
-2026-11-14 18:01:40.205;1;carga erguida
-2026-11-14 18:01:40.603;-1;caixa 5: erguida por todos, IR_ZONA B (lider 1)
-2026-11-14 18:01:41.829;5;chegou ao destino
-2026-11-14 18:01:42.104;-1;caixa 6: equipe completa na baia, ACOPLAR
-2026-11-14 18:01:42.205;1;entrou na passagem P1 (para a direita)
-2026-11-14 18:01:42.229;5;carga erguida
-2026-11-14 18:01:42.603;-1;caixa 6: erguida por todos, IR_ZONA C (lider 5)
-2026-11-14 18:01:42.906;1;saiu da passagem P1
-2026-11-14 18:01:43.929;5;entrou na passagem P2 (para a direita)
-2026-11-14 18:01:44.005;1;entrou na passagem P3 (para a direita)
-2026-11-14 18:01:44.629;5;saiu da passagem P2
-2026-11-14 18:01:44.706;1;saiu da passagem P3
-2026-11-14 18:01:46.129;5;entrou na passagem P3 (para a direita)
-2026-11-14 18:01:46.605;1;entrou na passagem P4 (para a direita)
-2026-11-14 18:01:46.829;5;saiu da passagem P3
-2026-11-14 18:01:47.306;1;saiu da passagem P4
-2026-11-14 18:01:48.729;5;entrou na passagem P4 (para a direita)
-2026-11-14 18:01:49.405;1;chegou ao destino
-2026-11-14 18:01:49.429;5;saiu da passagem P4
-2026-11-14 18:01:49.603;-1;caixa 5 entregue na zona B (robos 1)
-2026-11-14 18:01:49.605;1;carga solta
-2026-11-14 18:01:50.829;5;chegou ao destino
-2026-11-14 18:01:51.104;-1;caixa 6 entregue na zona C (robos 5)
-2026-11-14 18:01:51.129;5;carga solta
-2026-11-14 18:02:39.100;-1;sistema encerrado
+2026-11-14 18:47:33.806;-1;sistema iniciado
+2026-11-14 18:47:33.806;-1;mapa gerado com semente 42
+2026-11-14 18:47:33.808;0;robo criado (pid 16643) em (8,15)
+2026-11-14 18:47:33.809;1;robo criado (pid 16644) em (9,15)
+2026-11-14 18:47:33.810;2;robo criado (pid 16645) em (7,15)
+2026-11-14 18:47:33.810;-1;2 robo(s) novo(s) na frota
+2026-11-14 18:47:33.812;3;robo criado (pid 16646) em (8,16)
+2026-11-14 18:47:33.812;1;robo vivo
+2026-11-14 18:47:33.813;0;robo vivo
+2026-11-14 18:47:33.814;4;robo criado (pid 16651) em (8,14)
+2026-11-14 18:47:33.814;2;robo vivo
+2026-11-14 18:47:33.815;5;robo criado (pid 16654) em (10,15)
+2026-11-14 18:47:33.815;3;robo vivo
+2026-11-14 18:47:33.816;4;robo vivo
+2026-11-14 18:47:33.817;5;robo vivo
+2026-11-14 18:47:34.311;-1;4 robo(s) novo(s) na frota
+2026-11-14 18:47:34.317;-1;caixa 1 (tam 1, baia 1 -> zona D): robos 2 indo para a baia
+2026-11-14 18:47:34.323;-1;caixa 2 (tam 1, baia 2 -> zona C): robos 4 indo para a baia
+2026-11-14 18:47:34.328;-1;caixa 3 (tam 1, baia 3 -> zona B): robos 3 indo para a baia
+2026-11-14 18:47:34.334;-1;caixa 4 (tam 1, baia 4 -> zona A): robos 0 indo para a baia
+2026-11-14 18:47:34.413;0;tarefa: ir para a baia (caixa 4)
+2026-11-14 18:47:34.414;2;tarefa: ir para a baia (caixa 1)
+2026-11-14 18:47:34.415;3;tarefa: ir para a baia (caixa 3)
+2026-11-14 18:47:34.416;4;tarefa: ir para a baia (caixa 2)
+2026-11-14 18:47:35.115;3;chegou ao destino
+2026-11-14 18:47:35.311;-1;caixa 3: equipe completa na baia, ACOPLAR
+2026-11-14 18:47:35.415;3;carga erguida
+2026-11-14 18:47:35.416;4;chegou ao destino
+2026-11-14 18:47:35.811;-1;caixa 2: equipe completa na baia, ACOPLAR
+2026-11-14 18:47:35.812;-1;caixa 3: erguida por todos, IR_ZONA B (lider 3)
+2026-11-14 18:47:35.914;2;chegou ao destino
+2026-11-14 18:47:35.916;4;carga erguida
+2026-11-14 18:47:36.113;0;chegou ao destino
+2026-11-14 18:47:36.311;-1;caixa 1: equipe completa na baia, ACOPLAR
+2026-11-14 18:47:36.313;-1;caixa 2: erguida por todos, IR_ZONA C (lider 4)
+2026-11-14 18:47:36.314;-1;caixa 4: equipe completa na baia, ACOPLAR
+2026-11-14 18:47:36.413;0;carga erguida
+2026-11-14 18:47:36.414;2;carga erguida
+2026-11-14 18:47:36.810;-1;caixa 1: erguida por todos, IR_ZONA D (lider 2)
+2026-11-14 18:47:36.811;-1;caixa 4: erguida por todos, IR_ZONA A (lider 0)
+2026-11-14 18:47:37.215;3;entrou na passagem P1 (para a direita)
+2026-11-14 18:47:37.216;4;entrou na passagem P1 (para a direita)
+2026-11-14 18:47:37.915;3;saiu da passagem P1
+2026-11-14 18:47:38.113;0;entrou na passagem P2 (para a direita)
+2026-11-14 18:47:38.116;4;saiu da passagem P1
+2026-11-14 18:47:38.414;2;entrou na passagem P1 (para a direita)
+2026-11-14 18:47:38.813;0;saiu da passagem P2
+2026-11-14 18:47:39.015;3;entrou na passagem P3 (para a direita)
+2026-11-14 18:47:39.114;2;saiu da passagem P1
+2026-11-14 18:47:39.216;4;esperando passagem P3 (cheia ou na contramao)
+2026-11-14 18:47:39.715;3;saiu da passagem P3
+2026-11-14 18:47:39.716;4;entrou na passagem P3 (para a direita)
+2026-11-14 18:47:40.214;2;esperando passagem P3 (cheia ou na contramao)
+2026-11-14 18:47:40.416;4;saiu da passagem P3
+2026-11-14 18:47:40.513;0;entrou na passagem P3 (para a direita)
+2026-11-14 18:47:41.213;0;saiu da passagem P3
+2026-11-14 18:47:41.214;2;entrou na passagem P3 (para a direita)
+2026-11-14 18:47:41.615;3;entrou na passagem P4 (para a direita)
+2026-11-14 18:47:41.914;2;saiu da passagem P3
+2026-11-14 18:47:42.315;3;saiu da passagem P4
+2026-11-14 18:47:42.316;4;entrou na passagem P4 (para a direita)
+2026-11-14 18:47:43.016;4;saiu da passagem P4
+2026-11-14 18:47:43.113;0;entrou na passagem P4 (para a direita)
+2026-11-14 18:47:43.813;0;saiu da passagem P4
+2026-11-14 18:47:43.814;2;entrou na passagem P4 (para a direita)
+2026-11-14 18:47:44.415;3;chegou ao destino
+2026-11-14 18:47:44.416;4;chegou ao destino
+2026-11-14 18:47:44.514;2;saiu da passagem P4
+2026-11-14 18:47:44.810;-1;caixa 2 entregue na zona C (robos 4)
+2026-11-14 18:47:44.811;-1;caixa 3 entregue na zona B (robos 3)
+2026-11-14 18:47:44.815;3;carga solta
+2026-11-14 18:47:44.816;4;carga solta
+2026-11-14 18:47:45.415;2;chegou ao destino
+2026-11-14 18:47:45.813;-1;caixa 1 entregue na zona D (robos 2)
+2026-11-14 18:47:45.814;2;carga solta
+2026-11-14 18:47:45.826;-1;caixa 5 (tam 1, baia 1 -> zona B): robos 1 indo para a baia
+2026-11-14 18:47:45.913;1;tarefa: ir para a baia (caixa 5)
+2026-11-14 18:47:46.613;0;chegou ao destino
+2026-11-14 18:47:46.812;-1;caixa 4 entregue na zona A (robos 0)
+2026-11-14 18:47:46.813;0;carga solta
+2026-11-14 18:47:46.827;-1;caixa 6 (tam 1, baia 4 -> zona C): robos 5 indo para a baia
+2026-11-14 18:47:46.917;5;tarefa: ir para a baia (caixa 6)
+2026-11-14 18:47:47.613;1;chegou ao destino
+2026-11-14 18:47:48.311;-1;caixa 5: equipe completa na baia, ACOPLAR
+2026-11-14 18:47:48.413;1;carga erguida
+2026-11-14 18:47:48.617;5;chegou ao destino
+2026-11-14 18:47:48.811;-1;caixa 5: erguida por todos, IR_ZONA B (lider 1)
+2026-11-14 18:47:49.311;-1;caixa 6: equipe completa na baia, ACOPLAR
+2026-11-14 18:47:49.417;5;carga erguida
+2026-11-14 18:47:49.811;-1;caixa 6: erguida por todos, IR_ZONA C (lider 5)
+2026-11-14 18:47:50.413;1;entrou na passagem P1 (para a direita)
+2026-11-14 18:47:51.113;1;saiu da passagem P1
+2026-11-14 18:47:51.117;5;entrou na passagem P2 (para a direita)
+2026-11-14 18:47:51.817;5;saiu da passagem P2
+2026-11-14 18:47:52.213;1;entrou na passagem P3 (para a direita)
+2026-11-14 18:47:52.913;1;saiu da passagem P3
+2026-11-14 18:47:53.317;5;entrou na passagem P3 (para a direita)
+2026-11-14 18:47:54.017;5;saiu da passagem P3
+2026-11-14 18:47:54.813;1;entrou na passagem P4 (para a direita)
+2026-11-14 18:47:55.513;1;saiu da passagem P4
+2026-11-14 18:47:55.917;5;entrou na passagem P4 (para a direita)
+2026-11-14 18:47:56.617;5;saiu da passagem P4
+2026-11-14 18:47:57.612;1;chegou ao destino
+2026-11-14 18:47:57.812;-1;caixa 5 entregue na zona B (robos 1)
+2026-11-14 18:47:57.813;1;carga solta
+2026-11-14 18:47:58.017;5;chegou ao destino
+2026-11-14 18:47:58.312;-1;caixa 6 entregue na zona C (robos 5)
+2026-11-14 18:47:58.317;5;carga solta
+2026-11-14 18:48:46.310;-1;sistema encerrado

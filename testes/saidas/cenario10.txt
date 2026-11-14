@@ -4,44 +4,43 @@ Mapa gerado com semente 42
   P3: parede 2, y = 13, x 27..32, capacidade 1
   P4: parede 3, y = 24, x 42..47, capacidade 3
 Ponte MQTT: conectada ao broker localhost:1883
-Gestor: robo 0 criado (pid 12510) em (8,15)
-Gestor: (8,15) ocupada; robo 1 criado (pid 12511) em (9,15)
+Gestor: robo 0 criado (pid 16643) em (8,15)
+Gestor: (8,15) ocupada; robo 1 criado (pid 16644) em (9,15)
 Organizador: 2 robo(s) novo(s) na frota
-Gestor: (8,15) ocupada; robo 2 criado (pid 12512) em (7,15)
-Robo 0 vivo (pid 12510)
-Robo 1 vivo (pid 12511)
-Gestor: (8,15) ocupada; robo 3 criado (pid 12513) em (8,16)
-Robo 2 vivo (pid 12512)
-Gestor: (8,15) ocupada; robo 4 criado (pid 12518) em (8,14)
-Robo 4 vivo (pid 12518)
-Robo 3 vivo (pid 12513)
-Gestor: (8,15) ocupada; robo 5 criado (pid 12521) em (10,15)
-Robo 5 vivo (pid 12521)
+Gestor: (8,15) ocupada; robo 2 criado (pid 16645) em (7,15)
+Robo 1 vivo (pid 16644)
+Robo 0 vivo (pid 16643)
+Gestor: (8,15) ocupada; robo 3 criado (pid 16646) em (8,16)
+Robo 2 vivo (pid 16645)
+Gestor: (8,15) ocupada; robo 4 criado (pid 16651) em (8,14)
+Robo 3 vivo (pid 16646)
+Gestor: (8,15) ocupada; robo 5 criado (pid 16654) em (10,15)
+Robo 4 vivo (pid 16651)
+Robo 5 vivo (pid 16654)
 Console: robo 5 em DISPONIVEL
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   12510   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
-1   12511   DISPONIVEL         ( 9,15)  ( 9,15)  100%     0  auto  -1
-2   12512   DISPONIVEL         ( 7,15)  ( 7,15)  100%     0  auto  -1
-3   12513   DISPONIVEL         ( 8,16)  ( 8,16)  100%     0  auto  -1
-4   12518   DISPONIVEL         ( 8,14)  ( 8,14)  100%     0  auto  -1
-5   12521   DISPONIVEL         (10,15)  (10,15)  100%     0  auto  -1
+0   16643   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
+1   16644   DISPONIVEL         ( 9,15)  ( 9,15)  100%     0  auto  -1
+2   16645   DISPONIVEL         ( 7,15)  ( 7,15)  100%     0  auto  -1
+3   16646   DISPONIVEL         ( 8,16)  ( 8,16)  100%     0  auto  -1
+4   16651   DISPONIVEL         ( 8,14)  ( 8,14)  100%     0  auto  -1
+5   16654   DISPONIVEL         (10,15)  (10,15)  100%     0  auto  -1
 caixas entregues: 0
 Organizador: 4 robo(s) novo(s) na frota
 Organizador: caixa 1 (tam 1, baia 1 -> zona D): robos 2 indo para a baia
 Organizador: caixa 2 (tam 1, baia 2 -> zona C): robos 4 indo para a baia
 Organizador: caixa 3 (tam 1, baia 3 -> zona B): robos 3 indo para a baia
 Organizador: caixa 4 (tam 1, baia 4 -> zona A): robos 0 indo para a baia
-Organizador: caixa 2: equipe completa na baia, ACOPLAR
 Organizador: caixa 3: equipe completa na baia, ACOPLAR
-Organizador: caixa 2: erguida por todos, IR_ZONA C (lider 4)
+Organizador: caixa 2: equipe completa na baia, ACOPLAR
 Organizador: caixa 3: erguida por todos, IR_ZONA B (lider 3)
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   12510   DESLOCANDO         ( 3,22)  ( 3,22)   98%    12  auto  4
-1   12511   DISPONIVEL         ( 9,15)  ( 9,15)  100%     0  auto  -1
-2   12512   DESLOCANDO         ( 6, 4)  ( 6, 4)   98%    12  auto  1
-3   12513   OPERANDO_CARGA     ( 3,18)  ( 3,18)   99%     7  auto  3
-4   12518   OPERANDO_CARGA     ( 3,11)  ( 3,11)   99%     8  auto  2
-5   12521   DISPONIVEL         (10,15)  (10,15)  100%     0  auto  -1
+0   16643   DESLOCANDO         ( 3,22)  ( 3,22)   98%    12  auto  4
+1   16644   DISPONIVEL         ( 9,15)  ( 9,15)  100%     0  auto  -1
+2   16645   DESLOCANDO         ( 4, 4)  ( 4, 4)   98%    14  auto  1
+3   16646   OPERANDO_CARGA     ( 3,18)  ( 3,18)   99%     7  auto  3
+4   16651   AGUARDANDO_EQUIPE  ( 3,11)  ( 3,11)   99%     8  auto  2
+5   16654   DISPONIVEL         (10,15)  (10,15)  100%     0  auto  -1
 caixa 1   tam 1  baia 1 -> zona D  em andamento
 caixa 2   tam 1  baia 2 -> zona C  em andamento
 caixa 3   tam 1  baia 3 -> zona B  em andamento
@@ -50,28 +49,29 @@ caixa 5   tam 1  baia 1 -> zona B  esperando
 caixa 6   tam 1  baia 4 -> zona C  esperando
 caixas entregues: 0
 Organizador: caixa 1: equipe completa na baia, ACOPLAR
+Organizador: caixa 2: erguida por todos, IR_ZONA C (lider 4)
 Organizador: caixa 4: equipe completa na baia, ACOPLAR
 Organizador: caixa 1: erguida por todos, IR_ZONA D (lider 2)
 Organizador: caixa 4: erguida por todos, IR_ZONA A (lider 0)
 Organizador: caixa 2 entregue na zona C (robos 4)
-Organizador: caixa 1 entregue na zona D (robos 2)
 Organizador: caixa 3 entregue na zona B (robos 3)
+Organizador: caixa 1 entregue na zona D (robos 2)
 Organizador: caixa 5 (tam 1, baia 1 -> zona B): robos 1 indo para a baia
-Organizador: caixa 5: equipe completa na baia, ACOPLAR
 Organizador: caixa 4 entregue na zona A (robos 0)
 Organizador: caixa 6 (tam 1, baia 4 -> zona C): robos 5 indo para a baia
+Organizador: caixa 5: equipe completa na baia, ACOPLAR
 Organizador: caixa 5: erguida por todos, IR_ZONA B (lider 1)
 Organizador: caixa 6: equipe completa na baia, ACOPLAR
 Organizador: caixa 6: erguida por todos, IR_ZONA C (lider 5)
 Organizador: caixa 5 entregue na zona B (robos 1)
 Organizador: caixa 6 entregue na zona C (robos 5)
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   12510   DISPONIVEL         (56, 4)  (56, 4)   78%   111  auto  -1
-1   12511   DISPONIVEL         (56,11)  (56,11)   79%   105  auto  -1
-2   12512   DISPONIVEL         (56,25)  (56,25)   82%    91  auto  -1
-3   12513   DISPONIVEL         (56,11)  (56,11)   82%    93  auto  -1
-4   12518   DISPONIVEL         (56,18)  (56,18)   84%    82  auto  -1
-5   12521   DISPONIVEL         (56,18)  (56,18)   81%    99  auto  -1
+0   16643   DISPONIVEL         (56, 4)  (56, 4)   78%   111  auto  -1
+1   16644   DISPONIVEL         (56,11)  (56,11)   79%   105  auto  -1
+2   16645   DISPONIVEL         (56,25)  (56,25)   82%    91  auto  -1
+3   16646   DISPONIVEL         (56,11)  (56,11)   82%    93  auto  -1
+4   16651   DISPONIVEL         (56,18)  (56,18)   84%    82  auto  -1
+5   16654   DISPONIVEL         (56,18)  (56,18)   81%    99  auto  -1
 caixas entregues: 6
 Encerrando...
 Fim.

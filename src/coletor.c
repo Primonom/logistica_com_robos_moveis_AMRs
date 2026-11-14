@@ -20,6 +20,8 @@
  *     está vazia e mq_send bloqueia quando ela está cheia.
  *   - Só a thread Coletor escreve nos arquivos, então os arquivos não
  *     precisam de mutex.
+ *   - Com ATR_TEMPO_REAL=1: SCHED_FIFO prioridade 50, abaixo das periódicas
+ *     (é esporádica; ver tempo_real.c).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -90,6 +92,7 @@ void *tarefa_coletor(void *arg)
     ssize_t ret;
 
     (void)arg; /* não usado: a fila é a variável global fila_coletor */
+    ativar_tempo_real(PRIO_COLETOR, "coletor");
 
     /* Pasta relativa ao diretório de execução; "já existe" não é erro. */
     if (mkdir("logs", 0755) == -1 && errno != EEXIST) {

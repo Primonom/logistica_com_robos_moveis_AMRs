@@ -13,6 +13,10 @@ services:
     environment:
       ATR_MQTT_HOST: broker
       ATR_SEMENTE: ${ATR_SEMENTE:-}   # vazio = semente pela hora atual
+      ATR_TEMPO_REAL: ${ATR_TEMPO_REAL:-}  # 1 = SCHED_FIFO Rate Monotonic (tempo_real.c)
+    # SYS_NICE: permite pthread_setschedparam(SCHED_FIFO) dentro do container
+    cap_add:
+      - SYS_NICE
     depends_on:
       - broker
     volumes:

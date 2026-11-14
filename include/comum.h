@@ -25,8 +25,15 @@
 #include "mapa.h"
 
 /* ---------- Limites ---------- */
-#define MAX_ROBOS  16
-#define MAX_CAIXAS 64
+/* MAX_ROBOS = 64 para o teste de escalabilidade (testes/escalabilidade.sh).
+ * O que depende dele: o tamanho de /atr_shm, o JSON da ponte MQTT
+ * (TAMANHO_JSON), a fila de pedidos do Gestor (MAX_PEDIDOS = MAX_ROBOS) e
+ * as filas POSIX: 64 filas /atr_robo_* + /atr_coletor = 65 filas, abaixo
+ * do limite do Linux (/proc/sys/fs/mqueue/queues_max = 256) e com ~1 KB
+ * cada, bem abaixo do RLIMIT_MSGQUEUE de 800 KB por usuário (ver
+ * docs/ESCALABILIDADE.md). */
+#define MAX_ROBOS  64
+#define MAX_CAIXAS 128   /* o benchmark coloca 2 caixas por robô */
 #define MAX_ROTA_STATUS 32    /* "cantos" da rota publicados no buffer de status */
 
 /* ---------- Períodos das tarefas periódicas (em milissegundos) ---------- */
@@ -35,6 +42,18 @@
 #define PERIODO_ORGANIZADOR_MS  500   /* T3 */
 #define PERIODO_SIMULADOR_MS    100   /* simulador do hardware (simulador.c) */
 #define PERIODO_PONTE_MS        200   /* ponte MQTT: publica atr/status */
+
+/* ---------- Prioridades de tempo real (só com ATR_TEMPO_REAL=1) ----------
+ * Rate Monotonic: menor período = maior prioridade (SCHED_FIFO, 1..99).
+ * Coletor e Gestor não são periódicos (acordam por evento): ficam abaixo de
+ * todas as periódicas. Ver ativar_tempo_real() em tempo_real.c. */
+#define PRIO_NAVEGACAO    80   /* T = 100 ms */
+#define PRIO_SIMULADOR    80   /* T = 100 ms */
+#define PRIO_STATUS       70   /* T = 200 ms */
+#define PRIO_PONTE        70   /* T = 200 ms */
+#define PRIO_ORGANIZADOR  60   /* T = 500 ms */
+#define PRIO_COLETOR      50   /* esporádica */
+#define PRIO_GESTOR       50   /* esporádica */
 
 /* Avança o instante "t" em "ms" milissegundos.
  * Usada nos laços periódicos: cada tarefa guarda o instante da PRÓXIMA
@@ -48,6 +67,47 @@ static inline void somar_ms(struct timespec *t, int ms)
         t->tv_nsec -= 1000000000;
         t->tv_sec++;
     }
+}
+
+/* ---------- Medição de tempo das tarefas periódicas ----------
+ * Uma Medicao por tarefa (Simulador, Organizador e Ponte na memória
+ * compartilhada; Navegação e Status no slot de cada robô). Mostrada pelo
+ * comando "tempos" (console.c) e usada na análise de escalabilidade
+ * (docs/ESCALABILIDADE.md). Em cada ciclo:
+ *   atraso = início real - instante planejado ("proximo")  (jitter de liberação)
+ *   C      = fim - início                                   (tempo de execução)
+ *   perda de prazo se fim > proximo + período (deadline = período). */
+typedef struct {
+    long   n_ciclos;
+    double c_media_us, c_max_us;
+    double atraso_max_us;
+    long   perdas;
+} Medicao;
+
+/* b - a, em microssegundos. */
+static inline double diferenca_us(struct timespec a, struct timespec b)
+{
+    return (double)(b.tv_sec - a.tv_sec) * 1e6 + (double)(b.tv_nsec - a.tv_nsec) / 1e3;
+}
+
+/* Acumula um ciclo na medição. "proximo" = instante em que o ciclo DEVIA
+ * começar; inicio/fim = clock_gettime(CLOCK_MONOTONIC) logo depois de
+ * acordar e logo depois do trabalho. Quem chama trava o mutex que protege
+ * "m" (ver onde cada Medicao fica). Média incremental: não guarda amostras. */
+static inline void medir(Medicao *m, struct timespec proximo, struct timespec inicio,
+                         struct timespec fim, int periodo_ms)
+{
+    double c = diferenca_us(inicio, fim);
+    double atraso = diferenca_us(proximo, inicio);
+
+    m->n_ciclos++;
+    m->c_media_us += (c - m->c_media_us) / (double)m->n_ciclos;
+    if (c > m->c_max_us)
+        m->c_max_us = c;
+    if (atraso > m->atraso_max_us)
+        m->atraso_max_us = atraso;
+    if (diferenca_us(proximo, fim) > periodo_ms * 1000.0)
+        m->perdas++;
 }
 
 /* ---------- Nomes dos objetos de IPC POSIX ---------- */
@@ -121,6 +181,11 @@ typedef struct {
      * Navegação quando muda (como modo_automatico) e lido pelo simulador,
      * que confere se houve colisão (ver simulador.c). */
     int      grupo;
+
+    /* Medição de tempo das duas tarefas periódicas deste robô. Cada uma
+     * escreve a sua no fim do ciclo, com o mutex deste slot (o mesmo que
+     * ela já usa); o comando "tempos" lê/zera com o mesmo mutex. */
+    Medicao  med_navegacao, med_status;
 } Robo;
 
 /* Situação de uma caixa. */
@@ -166,7 +231,7 @@ typedef struct {
 /* ---------- Anti-colisão descentralizada (ponto extra +2, ocupacao.c) ---------- */
 
 /* Grupo de uma equipe de transporte com mais de 1 robô = GRUPO_EQUIPE +
- * carga_id (os ids de robô vão de 0 a 15, então não se confundem). */
+ * carga_id (os ids de robô vão de 0 a MAX_ROBOS - 1 = 63, então não se confundem). */
 #define GRUPO_EQUIPE 1000
 
 /* Grade de ocupação: quem está (ou reservou) cada célula.
@@ -240,6 +305,16 @@ typedef struct {
      * mutexes e o POR QUE estão nas structs acima). */
     Ocupacao        ocupacao;
     MonitorPassagem monitor[N_PASSAGENS];
+
+    /* Medição das tarefas periódicas do processo central (ver Medicao).
+     * POR QUE mutex: cada tarefa escreve a sua no fim do ciclo enquanto o
+     * comando "tempos" (Console ou thread de rede do MQTT) lê ou zera as
+     * três; sem ele a tabela poderia sair com n_ciclos de um ciclo e a
+     * média de outro (campos double não são atômicos). Um mutex só para as
+     * três: a seção crítica é copiar/atualizar 5 números. Fica na memória
+     * compartilhada como pedido no projeto, por isso PROCESS_SHARED. */
+    pthread_mutex_t mutex_tempos;
+    Medicao med_simulador, med_organizador, med_ponte;
 } MemoriaCompartilhada;
 
 /* Um atômico só funciona entre PROCESSOS se for "lock-free" (implementado
@@ -337,6 +412,9 @@ void copiar_ocupadas(int meu_grupo, bool ocupada[]);   /* desvio: células de ou
 bool entrar_passagem(int p, int sentido);
 void sair_passagem(int p);
 void ler_monitor(int p, int *dentro, int *sentido);    /* A* e ponte MQTT */
+
+/* ---------- tempo_real.c (os dois processos) ---------- */
+void ativar_tempo_real(int prioridade, const char *nome); /* só com ATR_TEMPO_REAL=1 */
 
 /* ---------- simulador.c (processo central) ---------- */
 void *tarefa_simulador(void *arg);   /* thread (arg não usado) */

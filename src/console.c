@@ -25,10 +25,18 @@
  *   historico [n]     últimas n linhas (padrão 30, máx. 100) de
  *                     logs/eventos.csv e logs/cargas.csv (para a operação
  *                     remota ver os registros gravados em disco)
+ *   tempos            tabela de tempo real: para cada tarefa periódica, T,
+ *                     ciclos, C médio, C máximo, atraso máximo, perdas de
+ *                     prazo e U = Cmax/T (Navegação e Status: pior caso
+ *                     entre os robôs). "tempos zerar" recomeça as medições.
  * Só no Console (stdin) — pela ponte respondem "não aceito":
  *   espera <seg>      pausa a leitura de comandos (para os cenários de teste)
  *   aguarda <id> <ESTADO> [timeout_s]  pausa até o robô estar no estado
  *                     pedido (padrão 30 s); deixa os cenários determinísticos
+ *   medir_falha <id>  liga a falha (como "falha <id>"), espera o buffer de
+ *                     status mostrar DEFEITO e imprime o tempo em ms
+ *                     (latência ponta a ponta de um evento crítico; usado
+ *                     por testes/escalabilidade.sh). Não desliga a falha.
  *   sair              encerra tudo (fim do arquivo também encerra)
  *   Linhas começando com '#' são comentários (usados nos cenários).
  *
@@ -58,6 +66,12 @@
  *     pela metade (sem '\n'), e essa linha é descartada. Os vetores de
  *     linhas são locais, então duas chamadas ao mesmo tempo não se misturam.
  *   - mapa: só LÊ mem->mapa, que não muda depois de gerado (sem mutex).
+ *   - tempos: copia as medições do processo central com mem->mutex_tempos
+ *     e as de cada robô com o mutex do robô, UM mutex por vez (regra
+ *     anti-deadlock), e monta a tabela depois, fora dos mutexes. "tempos
+ *     zerar" zera com os mesmos mutexes.
+ *   - "medir_falha" (só Console): escreve i_falha no hw (como "falha") e
+ *     lê o e_estado do buffer a cada 1 ms, sempre com o mutex do robô.
  *   - "aguarda" (só Console) lê o e_estado do buffer de status a cada
  *     100 ms, com o mutex do robô travado.
  */
@@ -345,6 +359,84 @@ static bool comando_historico(const char *linha, char *resp, int tam)
     return true;
 }
 
+/* Uma linha da tabela do "tempos". */
+static int linha_tempos(char *resp, int tam, int usado, const char *nome, int periodo_ms,
+                        const Medicao *m)
+{
+    return anexar(resp, tam, usado, "%-12s %4d %8ld %9.1f %9.1f %11.1f %7ld %8.4f\n",
+                  nome, periodo_ms, m->n_ciclos, m->c_media_us, m->c_max_us,
+                  m->atraso_max_us, m->perdas, m->c_max_us / (periodo_ms * 1000.0));
+}
+
+/* Junta a medição "m" de um robô no "pior caso" p: maior Cmed, maior Cmax,
+ * maior atraso; ciclos e perdas são somados. */
+static void juntar_pior(Medicao *p, const Medicao *m)
+{
+    p->n_ciclos += m->n_ciclos;
+    p->perdas += m->perdas;
+    if (m->c_media_us > p->c_media_us)       p->c_media_us = m->c_media_us;
+    if (m->c_max_us > p->c_max_us)           p->c_max_us = m->c_max_us;
+    if (m->atraso_max_us > p->atraso_max_us) p->atraso_max_us = m->atraso_max_us;
+}
+
+/* Comando "tempos" (tabela) e "tempos zerar". */
+static bool comando_tempos(const char *linha, char *resp, int tam)
+{
+    Medicao sim, org, ponte, nav, sta, zero;
+    char opcao[16] = "";
+    bool zerar, ativo;
+    int i, n_robos = 0, usado = 0;
+
+    sscanf(linha, "tempos %15s", opcao);
+    zerar = strcmp(opcao, "zerar") == 0;
+    if (opcao[0] != '\0' && !zerar)
+        return responder(false, resp, tam, "uso: tempos [zerar]");
+    memset(&zero, 0, sizeof(zero));
+    memset(&nav, 0, sizeof(nav));
+    memset(&sta, 0, sizeof(sta));
+
+    /* Processo central: as três com um só lock. */
+    pthread_mutex_lock(&mem->mutex_tempos);
+    sim = mem->med_simulador;
+    org = mem->med_organizador;
+    ponte = mem->med_ponte;
+    if (zerar)
+        mem->med_simulador = mem->med_organizador = mem->med_ponte = zero;
+    pthread_mutex_unlock(&mem->mutex_tempos);
+
+    /* Robôs: um mutex de cada vez; copia e solta antes do próximo. */
+    for (i = 0; i < MAX_ROBOS; i++) {
+        Medicao mn, ms;
+
+        pthread_mutex_lock(&mem->robos[i].mutex);
+        ativo = mem->robos[i].ativo;
+        mn = mem->robos[i].med_navegacao;
+        ms = mem->robos[i].med_status;
+        if (zerar)
+            mem->robos[i].med_navegacao = mem->robos[i].med_status = zero;
+        pthread_mutex_unlock(&mem->robos[i].mutex);
+        if (!ativo)
+            continue;
+        n_robos++;
+        juntar_pior(&nav, &mn);
+        juntar_pior(&sta, &ms);
+    }
+    if (zerar)
+        return responder(true, resp, tam, "ok");
+
+    usado = anexar(resp, tam, usado,
+                   "# tempos (T em ms; C e atraso em us; U = Cmax/T)\n"
+                   "tarefa          T   ciclos      Cmed      Cmax  atraso_max  perdas        U\n");
+    usado = linha_tempos(resp, tam, usado, "navegacao", PERIODO_NAVEGACAO_MS, &nav);
+    usado = linha_tempos(resp, tam, usado, "status", PERIODO_STATUS_MS, &sta);
+    usado = linha_tempos(resp, tam, usado, "simulador", PERIODO_SIMULADOR_MS, &sim);
+    usado = linha_tempos(resp, tam, usado, "organizador", PERIODO_ORGANIZADOR_MS, &org);
+    usado = linha_tempos(resp, tam, usado, "ponte_mqtt", PERIODO_PONTE_MS, &ponte);
+    anexar(resp, tam, usado, "robos ativos: %d (navegacao e status: pior caso entre eles)\n",
+           n_robos);
+    return true;
+}
+
 /* Executa UMA linha de comando e escreve a resposta em "resp": "ok", a
  * tabela do "status", as linhas do "historico", ou a mensagem de erro (retorna false no erro).
  * Chamada pelo Console (thread principal) e pela ponte MQTT (thread de
@@ -366,12 +458,13 @@ bool executar_comando(const char *linha, char *resp, int tam)
     if (strcmp(comando, "auto") == 0)    return comando_modo(linha, MODO_AUTO, resp, tam);
     if (strcmp(comando, "caixa") == 0)   return comando_caixa(linha, resp, tam);
     if (strcmp(comando, "historico") == 0) return comando_historico(linha, resp, tam);
+    if (strcmp(comando, "tempos") == 0)  return comando_tempos(linha, resp, tam);
     if (strcmp(comando, "mapa") == 0) {
         desenhar_mapa(resp, tam);   /* mem->mapa é só leitura: sem mutex */
         return true;
     }
     if (strcmp(comando, "espera") == 0 || strcmp(comando, "aguarda") == 0 ||
-        strcmp(comando, "sair") == 0)
+        strcmp(comando, "medir_falha") == 0 || strcmp(comando, "sair") == 0)
         return responder(false, resp, tam, "comando %s nao aceito aqui (so no Console)", comando);
     return responder(false, resp, tam, "comando desconhecido: %s", comando);
 }
@@ -435,6 +528,42 @@ static void comando_aguarda(const char *linha)
            timeout, id, nome);
 }
 
+/* Comando "medir_falha <id>": latência ponta a ponta de um evento crítico.
+ * Liga i_falha (como o hardware faria) e mede quanto tempo passa até o
+ * buffer de status mostrar DEFEITO (a Status percebeu, a Navegação vai
+ * segurar a posição). Consulta a cada 1 ms (resolução da medida). */
+static void comando_medir_falha(const char *linha)
+{
+    struct timespec passo = {0, 1000000}; /* 1 ms */
+    struct timespec t0, agora;
+    double ms = 0.0;
+    int id;
+    Estado atual;
+
+    if (sscanf(linha, "medir_falha %d", &id) != 1 || robo_ativo(id) == NULL) {
+        printf("Console: uso: medir_falha <id de robo ativo>\n");
+        return;
+    }
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    pthread_mutex_lock(&mem->robos[id].mutex);
+    mem->robos[id].hw.i_falha = true;      /* emula o hardware, como "falha" */
+    pthread_mutex_unlock(&mem->robos[id].mutex);
+
+    while (ms < 5000.0) {
+        pthread_mutex_lock(&mem->robos[id].mutex);
+        atual = mem->robos[id].e_estado;   /* buffer de status, não o hw */
+        pthread_mutex_unlock(&mem->robos[id].mutex);
+        clock_gettime(CLOCK_MONOTONIC, &agora);
+        ms = diferenca_us(t0, agora) / 1000.0;
+        if (atual == DEFEITO) {
+            printf("latencia_falha robo %d: %.1f ms\n", id, ms);
+            return;
+        }
+        nanosleep(&passo, NULL);
+    }
+    printf("Console: AVISO: timeout de 5 s esperando robo %d em DEFEITO\n", id);
+}
+
 /* Laço de comandos. Retorna em "sair" ou no fim da entrada. */
 void executar_console(void)
 {
@@ -452,6 +581,8 @@ void executar_console(void)
             comando_espera(linha);
         } else if (strcmp(comando, "aguarda") == 0) {
             comando_aguarda(linha);
+        } else if (strcmp(comando, "medir_falha") == 0) {
+            comando_medir_falha(linha);
         } else if (!executar_comando(linha, resp, sizeof(resp))) {
             printf("Console: %s\n", resp);          /* erro */
         } else if (strcmp(resp, "ok") != 0) {
