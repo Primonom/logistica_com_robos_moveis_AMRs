@@ -13,6 +13,9 @@
  *     (Navegação e Status) lê a ocupação. O vetor sem_passagem[] não muda
  *     depois disso, então não precisa de mutex.
  *   - mem->mapa: só leitura (gerado pelo processo central antes do fork).
+ *   - grade de ocupação e monitores das passagens (anti-colisão): ficam na
+ *     memória compartilhada, com mutex próprio; quem usa é a Navegação
+ *     (ver ocupacao.c).
  *   - estado_local (struct deste processo, com mutex comum): é por ela que
  *     Navegação e Status trocam informação (ver comum.h).
  *   - mem->encerrar (atomic_bool): as threads terminam quando ele vira
@@ -33,9 +36,9 @@ MemoriaCompartilhada *mem;
 mqd_t fila_coletor;
 int id_robo;
 /* mutex, estado, estado_antes, parar, ir_recarregar, recarga_x/y,
- * destino_x/y (sem rota), n_rota e os vetores da rota (vazios). */
+ * destino_x/y (sem rota), n_rota, os vetores da rota (vazios) e bloqueado. */
 EstadoLocal estado_local = { PTHREAD_MUTEX_INITIALIZER, DISPONIVEL, DISPONIVEL,
-                              false, false, 0, 0, -1, -1, 0, {0}, {0} };
+                              false, false, 0, 0, -1, -1, 0, {0}, {0}, false };
 
 int main(int argc, char *argv[])
 {

@@ -1,0 +1,27 @@
+# Cenário 10: 6 robôs e 6 caixas de tamanho 1 ao mesmo tempo (semente 42).
+#  - os 6 "novo" pedem a posição padrão (8,15): o Gestor coloca cada robô
+#    na célula LIVRE mais próxima (BFS na grade de ocupação);
+#  - 6 caixas de uma vez, nas 4 baias e para as 4 zonas: 4 entregas
+#    andam em paralelo (uma por baia) e depois as outras 2, com robôs
+#    se cruzando nos corredores e nas passagens.
+# Esperado: as 6 caixas entregues (logs/cargas.csv com 6 linhas), sem
+# timeout e sem nenhuma COLISAO (o rodar_todos.sh confere as duas coisas).
+novo
+novo
+novo
+novo
+novo
+novo
+aguarda 5 DISPONIVEL
+status
+caixa 1 1 D
+caixa 1 2 C
+caixa 1 3 B
+caixa 1 4 A
+caixa 1 1 B
+caixa 1 4 C
+espera 2
+status
+espera 70
+status
+sair

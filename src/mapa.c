@@ -8,8 +8,9 @@
  *     (Console e ponte MQTT), na_estacao (simulador);
  *   - processo central: também passos_caminho e estacao_mais_proxima
  *     (Organizador estima a bateria da tarefa);
- *   - processo robo: calcular_caminho (Navegação), estacao_mais_proxima
- *     (Status e Navegação) e na_estacao (Status).
+ *   - processo robo: calcular_caminho e calcular_caminho_evitando
+ *     (Navegação; o segundo no desvio de travamentos, ponto extra +2),
+ *     estacao_mais_proxima (Status e Navegação) e na_estacao (Status).
  *
  * 1) GERAÇÃO DO MAPA (gerar_mapa), a cada execução, com a semente da
  *    variável de ambiente ATR_SEMENTE (ou time(NULL) se ela não existir):
@@ -27,8 +28,12 @@
  *
  * 2) A* (calcular_caminho): menor caminho em grade com vizinhança 4.
  *    Custo de um passo = 1 + custo extra; o extra só existe ao ENTRAR na
- *    região de uma passagem: 3 x (robôs dentro dela agora). Assim um robô
- *    evita, se o desvio compensar, uma passagem que está cheia.
+ *    região de uma passagem: 3 x (robôs dentro dela agora), e mais 30 se
+ *    quem está dentro anda no sentido CONTRÁRIO (mão única: teria de
+ *    esperar o túnel esvaziar, ver ocupacao.c). Assim um robô evita, se o
+ *    desvio compensar, uma passagem cheia ou na contramão.
+ *    calcular_caminho_evitando recebe ainda um vetor de células proibidas
+ *    (robôs de outros grupos, no desvio de travamentos da Navegação).
  *    Heurística = distância de Manhattan até o destino. Ela nunca é maior
  *    que o custo real (cada passo custa pelo menos 1), ou seja, é
  *    ADMISSÍVEL: o A* devolve o caminho ÓTIMO.
@@ -43,8 +48,12 @@
  *   - sem_getvalue: o A* lê quantos robôs estão em cada passagem. É uma
  *     leitura instantânea, só para ESTIMAR o custo: logo depois o valor
  *     pode mudar (o caminho pode ficar "desatualizado"). Não tem problema:
- *     quem garante a capacidade continua sendo o sem_timedwait da
- *     Navegação. No pior caso o robô espera na porta e replaneja.
+ *     quem garante a capacidade continua sendo o sem_trywait do monitor
+ *     da passagem (ocupacao.c). No pior caso o robô espera na porta e
+ *     replaneja.
+ *   - ler_monitor (ocupacao.c): lê dentro/sentido de cada passagem com o
+ *     mutex do monitor, um de cada vez, copiando para vetores locais antes
+ *     da busca. Também é só estimativa (quem decide é entrar_passagem).
  *   - sem_passagem[]: escrito uma vez por abrir_semaforos_passagens(),
  *     antes de o processo criar as threads; depois só lido.
  *   - rand() não é seguro entre threads, mas só gerar_mapa o usa, e ela
@@ -61,6 +70,7 @@
 #define DISTANCIA_MIN_Y   5    /* entre duas passagens da mesma parede */
 #define RAIO_BOCA         2    /* sem obstáculo a até 2 células de uma boca */
 #define CUSTO_POR_ROBO    3    /* custo extra por robô dentro da passagem */
+#define CUSTO_CONTRAMAO   30    /* passagem ocupada no sentido contrário */
 
 sem_t *sem_passagem[N_PASSAGENS];
 
@@ -164,9 +174,10 @@ void fechar_semaforos_passagens(void)
         sem_close(sem_passagem[i]);
 }
 
-/* Quantos robôs estão dentro de cada passagem AGORA (estimativa: ver
- * "Sincronização" no topo). ocupados = capacidade - vagas livres. */
-static void ler_ocupacao(int ocupados[])
+/* Quantos robôs estão dentro de cada passagem AGORA e em que sentido
+ * (estimativa: ver "Sincronização" no topo). ocupados = capacidade - vagas
+ * livres do semáforo; dentro/sentido vêm do monitor da mão única. */
+static void ler_ocupacao(int ocupados[], int dentro[], int sentido[])
 {
     int i, livres;
 
@@ -175,6 +186,7 @@ static void ler_ocupacao(int ocupados[])
         if (sem_getvalue(sem_passagem[i], &livres) == 0 &&
             livres < mem->mapa.passagens[i].capacidade)
             ocupados[i] = mem->mapa.passagens[i].capacidade - livres;
+        ler_monitor(i, &dentro[i], &sentido[i]);
     }
 }
 
@@ -218,24 +230,43 @@ static int heuristica(int x, int y, int xd, int yd)
     return abs(x - xd) + abs(y - yd);
 }
 
-/* Custo de ir da célula (xa, ya) para a vizinha (xb, yb). */
-static int custo_passo(int xa, int ya, int xb, int yb, const int ocupados[])
+/* Sentido de quem entra na região de p pela célula xb: pela boca
+ * esquerda anda para a direita (0); pela direita, para a esquerda (1). */
+int sentido_de_entrada(int p, int xb)
 {
-    int p = passagem_em(xb, yb);
+    return xb == mem->mapa.passagens[p].x_entrada ? 0 : 1;
+}
 
-    if (p != -1 && passagem_em(xa, ya) != p)   /* entrando na região de p */
-        return 1 + CUSTO_POR_ROBO * ocupados[p];
-    return 1;
+/* Custo de ir da célula (xa, ya) para a vizinha (xb, yb). */
+static int custo_passo(int xa, int ya, int xb, int yb, const int ocupados[],
+                       const int dentro[], const int sentido[])
+{
+    int p = passagem_em(xb, yb), custo = 1;
+
+    if (p != -1 && passagem_em(xa, ya) != p) {   /* entrando na região de p */
+        custo += CUSTO_POR_ROBO * ocupados[p];
+        if (dentro[p] > 0 && sentido[p] != sentido_de_entrada(p, xb))
+            custo += CUSTO_CONTRAMAO;
+    }
+    return custo;
 }
 
 bool calcular_caminho(int x0, int y0, int xd, int yd, Caminho *c)
+{
+    return calcular_caminho_evitando(x0, y0, xd, yd, NULL, c);
+}
+
+/* A*. "proibida" (índice y * LARGURA + x) = células que o caminho não pode
+ * usar além das paredes e obstáculos; NULL = nenhuma. */
+bool calcular_caminho_evitando(int x0, int y0, int xd, int yd,
+                               const bool proibida[], Caminho *c)
 {
     /* POR QUE vetores LOCAIS (e não static): Navegação e Status chamam o A*
      * ao mesmo tempo; com vetores static uma thread estragaria a busca da
      * outra. Locais, cada chamada tem os seus e não precisa de mutex. */
     int g[N_CELULAS], f[N_CELULAS], pai[N_CELULAS];
     char situacao[N_CELULAS];
-    int ocupados[N_PASSAGENS];
+    int ocupados[N_PASSAGENS], dentro[N_PASSAGENS], sentido[N_PASSAGENS];
     static const int DX[4] = {1, -1, 0, 0};
     static const int DY[4] = {0, 0, 1, -1};
     int i, k, atual, ax, ay, vx, vy, v, novo_g, n, destino;
@@ -243,7 +274,7 @@ bool calcular_caminho(int x0, int y0, int xd, int yd, Caminho *c)
     c->n = 0;
     if (!dentro_da_grade(x0, y0) || !celula_livre(xd, yd))
         return false;
-    ler_ocupacao(ocupados);
+    ler_ocupacao(ocupados, dentro, sentido);
     memset(situacao, NAO_VISTA, sizeof(situacao));
     destino = yd * MAPA_LARGURA + xd;
 
@@ -275,9 +306,11 @@ bool calcular_caminho(int x0, int y0, int xd, int yd, Caminho *c)
             if (!celula_livre(vx, vy))
                 continue;
             v = vy * MAPA_LARGURA + vx;
+            if (proibida != NULL && proibida[v])
+                continue;
             if (situacao[v] == FECHADA)
                 continue;
-            novo_g = g[atual] + custo_passo(ax, ay, vx, vy, ocupados);
+            novo_g = g[atual] + custo_passo(ax, ay, vx, vy, ocupados, dentro, sentido);
             if (situacao[v] == NAO_VISTA || novo_g < g[v]) {
                 g[v] = novo_g;
                 f[v] = novo_g + heuristica(vx, vy, xd, yd);

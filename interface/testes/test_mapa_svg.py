@@ -180,6 +180,27 @@ class TestMapaSvg(unittest.TestCase):
         mapa = dict(MAPA, zonas=[{"id": "<&>", "x": 56, "y": 4}])
         ET.fromstring(mapa_svg.svg_fundo(mapa))
 
+    def test_seta_de_sentido_so_na_passagem_ocupada(self):
+        st = status([])
+        st["passagens"][0].update(dentro=2, sentido=1)     # P1: 2 robôs para a esquerda
+        st["passagens"][1].update(dentro=0, sentido=0)     # P2: vazia, sem seta
+        svg = mapa_svg.svg_vivo(MAPA, st)
+        ET.fromstring(svg)
+        self.assertEqual(svg.count('class="seta-sentido"'), 1)
+        x1, x2, _ = mapa_svg.tunel(MAPA["passagens"][0])
+        # para a esquerda: a ponta fica no lado esquerdo do túnel
+        self.assertIn(f'L{mapa_svg.px(x1) + 8} ', svg)
+        # status antigo (sem "dentro"): nenhuma seta
+        self.assertNotIn("seta-sentido", mapa_svg.svg_vivo(MAPA, status([])))
+
+    def test_robo_bloqueado_mostra_aguardando(self):
+        r = robo(0, 10, 15, "DESLOCANDO")
+        self.assertNotIn('class="aguardando"', mapa_svg.svg_vivo(MAPA, status([r])))
+        r["bloqueado"] = True
+        svg = mapa_svg.svg_vivo(MAPA, status([r]))
+        ET.fromstring(svg)
+        self.assertIn('class="aguardando"', svg)
+
     def test_legenda_valida(self):
         ET.fromstring(mapa_svg.svg_legenda())
 

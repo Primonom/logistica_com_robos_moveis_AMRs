@@ -149,7 +149,8 @@ class CardRobo:
         if r["estado"] != self.estado_desenhado:          # só redesenha se mudou
             self.estado_desenhado = r["estado"]
             self.miniatura.set_content(mapa_svg.svg_miniatura_robo(r["estado"], 44))
-        self.estado.set_text(estilo["rotulo"])
+        # "bloqueado" = esperando célula ou passagem (anti-colisão no C)
+        self.estado.set_text(estilo["rotulo"] + (" · aguardando" if r.get("bloqueado") else ""))
         self.estado.style(f"color: {estilo['cor']}")
         self.bateria.set_value(r["bateria"] / 100)
         self.bateria.style(f"color: {cores.da_bateria(r['bateria'])}")

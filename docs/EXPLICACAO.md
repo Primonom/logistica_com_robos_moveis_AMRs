@@ -2,8 +2,9 @@
 
 Este documento explica, para o relatório e a entrevista, **cada mecanismo de
 sincronização** do sistema: onde ele está, que problema resolve e o que
-aconteceria sem ele. A seção 7 explica o **ponto extra** (mapa aleatório e
-IA de rotas com A*). No fim estão as **simplificações assumidas**.
+aconteceria sem ele. A seção 7 explica o **ponto extra +3** (mapa aleatório e
+IA de rotas com A*) e a seção 8 o **ponto extra +2** (anti-colisão
+descentralizada). No fim estão as **simplificações assumidas**.
 
 ---
 
@@ -43,6 +44,8 @@ Processo central "logistica"                 Processo "robo <id>" (um por robô)
 | fila de pedidos | fila circular + mutex + variável de condição | `gestor.c` | Console / Ponte MQTT → Gestor |
 | `robos_novos` | contador + mutex | `gestor.c` | Gestor → Organizador |
 | `estado_local` | struct + mutex comum | `robo_main.c` | Navegação ↔ Status |
+| `mem->ocupacao` (grade de ocupação) | matriz + 1 mutex `PTHREAD_PROCESS_SHARED` | `memoria.c` | Navegação de cada robô; Gestor (célula inicial) |
+| `mem->monitor[4]` (mão única das passagens) | monitor: mutex `PTHREAD_PROCESS_SHARED` + estado | `memoria.c` | Navegação (entra/sai); A* e Ponte (só leem) |
 
 **Regra geral contra deadlock:** em nenhum ponto do código uma thread segura
 dois mutexes ao mesmo tempo. Cada `pthread_mutex_lock` é seguido do
@@ -189,26 +192,32 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
 ### 2.8 Semáforos contadores nomeados `/atr_passagem_1..4`
 - **Onde:** criados em `main.c: criar_semaforos` com valor inicial = a
   capacidade **sorteada** de cada passagem (as capacidades 1, 2, 3 e 4,
-  embaralhadas a cada execução); usados em `navegacao.c` (`tentar_entrar`,
-  `liberar_se_saiu`). Abertos uma vez por processo
+  embaralhadas a cada execução); usados por `ocupacao.c`
+  (`entrar_passagem`, `sair_passagem`), chamados pela Navegação
+  (`tentar_entrar`, `liberar_se_saiu`). Abertos uma vez por processo
   (`abrir_semaforos_passagens`, antes das threads).
 - **Problema:** limitar quantos robôs ficam dentro de cada passagem. A
   **região** da passagem = o túnel de 4 células que atravessa a parede + 1
   célula de "boca" de cada lado.
 - **Como:** o robô anda uma célula por vez. Quando a **próxima** célula é da
-  região de `p` e a atual não, faz `sem_timedwait` **antes** de mandar o robô
-  entrar; quando ele chega numa célula fora da região, `sem_post`.
+  região de `p` e a atual não, pede entrada no **monitor de mão única** de `p`
+  (8.3), que faz `sem_trywait` **antes** de mandar o robô entrar; quando ele
+  (que já esteve dentro) chega numa célula fora da região, `sem_post`.
+  O semáforo cuida da **capacidade**; o monitor cuida do **sentido**.
 - **Sem eles:** mais robôs que a capacidade dentro da passagem (colisão).
-- **Por que `sem_timedwait` com prazo curto (10 ms):** se a passagem está
-  cheia, o robô desiste **neste ciclo** e tenta no próximo. A thread não fica
-  presa e continua lendo mensagens (`PAUSAR`) e a flag `parar` (defeito).
+- **Por que `sem_trywait` (não bloqueia):** se a passagem está cheia, o robô
+  desiste **neste ciclo** e tenta no próximo. A thread não fica presa e
+  continua lendo mensagens (`PAUSAR`) e a flag `parar` (defeito). E como ele
+  é chamado com o mutex do monitor travado, não pode bloquear: ninguém fica
+  preso dentro de um mutex. (Antes era `sem_timedwait` com prazo de 10 ms;
+  com o monitor a espera virou "tenta a cada ciclo".)
 - **Contra deadlock:** um robô nunca segura duas passagens ao mesmo tempo. As
   regiões ficam separadas por mais de 1 célula (passagens de paredes
   diferentes têm 9 colunas entre si; na mesma parede, 5 ou mais linhas),
   então entre uma região e outra sempre há uma célula livre, onde ele faz o
   `sem_post`. E se ainda segura uma (equipe saindo), ele **não pede** a
   próxima: espera. Isso quebra a condição "segura e espera".
-- **Equipe = uma vaga:** no transporte só o líder faz `sem_timedwait`/`sem_post`.
+- **Equipe = uma vaga:** no transporte só o líder entra/sai do monitor (`sem_trywait`/`sem_post`).
   Ele só faz `sem_post` quando **ele e todos os membros** já saíram da região
   (ver 7.6).
 - **Robô em DEFEITO dentro da passagem continua ocupando a vaga** (não faz
@@ -217,7 +226,7 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
 - **`sem_getvalue` (leitura sem esperar):** o A* lê quantas vagas estão livres
   para calcular o custo dinâmico, e a ponte MQTT para exibir. É só uma
   estimativa do instante: pode mudar logo depois. Nada de segurança depende
-  dela; quem garante a capacidade é o `sem_timedwait`.
+  dela; quem garante a capacidade é o `sem_trywait` dentro do monitor.
 
 ### 2.9 `fork()` seguido imediatamente de `execl()`
 - **Onde:** `gestor.c: criar_processo_robo`.
@@ -285,6 +294,14 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
   `celulas_andadas[]` só é usado por esta thread (sem mutex).
 - **Sem o mutex:** a Status poderia ler x novo com y antigo, ou a bateria no
   meio de uma atualização.
+- **Conferência de colisões (teste do ponto extra +2):** depois de mover
+  todos, `conferir_colisoes` copia posição (`hw`) e `grupo` de cada robô, um
+  mutex por vez, e compara as cópias sem mutex: dois robôs de **grupos
+  diferentes** na mesma célula que não seja de estacionamento = evento
+  `COLISAO: robos i e j em (x,y)` (uma vez por encontro, `em_colisao[][]`, só
+  desta thread). Ler o `hw` de todos é a exceção documentada: o simulador **é**
+  o hardware. Os cenários 8, 9 e 10 terminam com zero `COLISAO` (o
+  `rodar_todos.sh` confere com `grep`).
 - **Por que em C, no processo central:** usa a memória compartilhada
   diretamente, sem traduzir o `hw` de cada robô em mensagens MQTT a cada 100 ms.
 
@@ -571,8 +588,11 @@ Organizador).
 
 ### 7.3 Custo dinâmico das passagens ("otimização")
 - **Regra:** ao **entrar** na região de uma passagem (vindo de fora dela), o
-  passo custa `1 + 3 × (robôs dentro da passagem agora)`. A ocupação é lida
-  uma vez por cálculo com `sem_getvalue` (`ocupados = capacidade − vagas`).
+  passo custa `1 + 3 × (robôs dentro da passagem agora)`, e **+30** se quem
+  está dentro anda no **sentido contrário** (mão única, 8.3: o robô teria de
+  esperar o túnel esvaziar). A ocupação é lida uma vez por cálculo com
+  `sem_getvalue` (`ocupados = capacidade − vagas`) e o sentido com
+  `ler_monitor` (mutex do monitor, um por vez, cópia local).
 - **Efeito:** com uma passagem vazia o A* escolhe o caminho mais curto; com
   ela cheia, prefere outra se o desvio custar menos que a espera estimada.
 - **Estimativa, não garantia:** o valor pode estar desatualizado um instante
@@ -638,10 +658,146 @@ Organizador).
 
 ---
 
-## 8. Simplificações assumidas (citar no relatório)
+## 8. Ponto extra +2: anti-colisão descentralizada
+
+> Enunciado: "implementar sistema descentralizado anti-colisão, em cada robô,
+> sem precisar tomar tempo de processamento do Organizador da Logística".
+
+**Por que é descentralizado:** toda decisão de colisão acontece na thread de
+**Navegação de cada robô** (`navegacao.c`, usando as funções de
+`ocupacao.c`). O Organizador **nunca é consultado** e não muda nada (não há
+"controlador de tráfego"): cada robô olha a grade de ocupação e o monitor da
+passagem na memória compartilhada e decide sozinho se anda ou espera. O
+custo é **O(1) por passo** (testar e marcar 1 célula sob um mutex), fora o
+replanejamento ocasional do desvio (um A*, só quando trava).
+
+### 8.1 Grade de ocupação (`mem->ocupacao`)
+- **Onde:** `comum.h: struct Ocupacao` (`n[30][60]`, `grupo[30][60]` e um
+  mutex `PROCESS_SHARED`); funções em `ocupacao.c` (`reservar_celula`,
+  `liberar_celula`, `copiar_ocupadas`, `reservar_livre_perto`).
+- **Problema:** antes, dois robôs podiam ocupar a mesma célula (era a
+  simplificação "colisão fora das passagens não é tratada").
+- **Como:** `n` = quantos robôs estão ou reservaram a célula; `grupo` = de
+  quem ela é. **Grupo** de um robô = o id dele, ou `1000 + carga_id` se ele
+  está numa equipe de transporte com mais de 1 robô (a equipe anda junta e
+  entra nas células umas das outras). Regra para **entrar**: pode se
+  `n == 0` ou se `grupo == meu grupo`.
+- **Células de estacionamento** (baias, zonas, estações) aceitam vários
+  robôs e não são nem verificadas nem marcadas: a equipe se **reúne** na
+  baia, **entrega** na zona e vários robôs podem **recarregar** na mesma
+  estação. Sem isso, os robôs que ficam parados na zona depois da entrega
+  bloqueariam a próxima entrega naquela zona para sempre.
+- **Por que um mutex só para a grade inteira:** a seção crítica é minúscula
+  (testar e marcar 1 célula). Um mutex por célula seriam 1800 mutexes, mais
+  difícil de explicar, sem ganho real (os robôs passam microssegundos nela).
+- **Sem o mutex:** dois robôs veriam a mesma célula com `n == 0` ao mesmo
+  tempo e entrariam os dois (colisão).
+- **Grupo no slot:** a Navegação também escreve o grupo em `Robo.grupo`
+  (como já fazia com `modo_automatico`), só para o simulador conferir colisões.
+  O grupo só muda no `IR_ZONA` (na baia) e no `SOLTAR` (na zona), sempre
+  numa célula de estacionamento, que não está marcada na grade.
+
+### 8.2 Protocolo de cada passo (`dar_passo` / `confirmar_chegada`)
+1. **Reservar** a próxima célula (`n++`, `grupo = meu`) se a regra deixar;
+   senão o robô **espera** neste ciclo (setpoint = posição atual). Só depois
+   de reservar ele escreve o setpoint.
+2. Quando o simulador confirma que ele **chegou** na próxima célula (início
+   do ciclo seguinte), **libera** a anterior (`n--`).
+- Assim cada robô segura **no máximo 2 células** (a atual e a próxima).
+- **Parar sem corrida (`parar_onde_esta`):** para cancelar uma reserva (o
+  caminho mudou) ou segurar a posição (DEFEITO/PAUSAR), a Navegação lê a
+  posição e escreve o setpoint nela **no mesmo lock** do `Robo.mutex`. Se
+  fizesse "ler, soltar, escrever", o simulador poderia mover o robô no meio
+  para a célula que ele acabou de devolver.
+- **Gestor:** ao criar um robô, `reservar_livre_perto` faz uma **BFS** a
+  partir da posição pedida e escolhe a célula livre (`n == 0`) e válida mais
+  próxima, e já a reserva para o robô (tudo sob o mutex da grade, para
+  ninguém entrar nela entre a escolha e a reserva). A mensagem "robo criado
+  em (x,y)" informa a posição **real** (no cenário 10 os 6 robôs pedem
+  (8,15) e nascem em células vizinhas).
+- **Encerramento:** o robô não devolve as células no SIGTERM: o sistema
+  inteiro está terminando e a memória compartilhada é removida em seguida.
+
+### 8.3 Passagens de mão única: monitor + semáforo ("ponte de uma via")
+- **Onde:** `comum.h: struct MonitorPassagem` (`dentro`, `sentido`,
+  `esperando[2]` e um mutex `PROCESS_SHARED`), `mem->monitor[p]`; funções
+  `entrar_passagem`/`sair_passagem` em `ocupacao.c`. (O nome `Passagem` já
+  era a geometria da passagem, em `mapa.h`.)
+- **Problema:** num túnel de 1 célula de altura, dois robôs em sentidos
+  opostos se encontrariam no meio e nenhum poderia andar (deadlock: cada um
+  segura a célula que o outro quer, e não há para onde desviar).
+- **Como (tudo sob `monitor[p].mutex`):** sentido 0 = para a direita (entra
+  pela boca esquerda), 1 = para a esquerda.
+  - pode entrar se `dentro == 0` **ou** (`sentido == meu` **e**
+    `esperando[oposto] == false`);
+  - se pode, `sem_trywait` no semáforo `/atr_passagem_p` (a **capacidade**
+    continua sendo o semáforo: o enunciado pede semáforos e a tela lê o
+    valor); se conseguiu: `dentro++`, `sentido = meu`, `esperando[meu] = false`;
+  - se não pode (ou o semáforo está sem vaga): `esperando[meu] = true` e
+    tenta no próximo ciclo;
+  - ao sair: `dentro--` e `sem_post`.
+- **Inanição:** sem o `esperando[oposto]`, um fluxo contínuo num sentido
+  nunca deixaria `dentro` chegar a 0, e o outro lado esperaria para sempre.
+  Com ele, quem chega depois no sentido atual **para de entrar**, o túnel
+  esvazia e o outro lado passa.
+- **Ninguém fica bloqueado dentro de um mutex:** tudo é tentativa por ciclo
+  (`sem_trywait` não espera); a thread continua lendo mensagens e a flag `parar`.
+- **Sem o mutex do monitor:** dois robôs de sentidos opostos veriam
+  `dentro == 0` ao mesmo tempo e entrariam os dois.
+- **Equipe = 1 vaga:** só o líder entra/sai do monitor (e só sai quando a
+  equipe inteira saiu, 7.6).
+- **"Saiu" só depois de ter entrado:** com a grade, o robô pode pegar a
+  passagem e ficar uns ciclos parado na porta esperando a boca; isso não
+  conta como "saiu" (flag `entrou_na_passagem`).
+- **A* (7.3):** passagem ocupada no sentido contrário custa +30, então o
+  robô tende a escolher outra; esperando mais de 3 s na porta, ele replaneja.
+
+### 8.4 Travamentos fora das passagens: desvio com desempate
+- **Problema:** dois robôs frente a frente no corredor (cada um quer a
+  célula do outro), ou um robô parado (DEFEITO, ou DISPONIVEL num lugar de
+  passagem) no meio do caminho de outro.
+- **Como:** se o robô fica **bloqueado pela grade por mais de 10 ciclos
+  (1 s)**, recalcula o A* (`calcular_caminho_evitando`) tratando como
+  obstáculo as células com `n > 0` de **outros grupos**. A grade é copiada
+  para um vetor local com o mutex (`copiar_ocupadas`) e o A* roda **sem
+  mutex**. Evento "desviando de robo".
+- **Desempate:** se os dois desviassem ao mesmo tempo, poderiam se travar de
+  novo do outro lado. Então o de **maior grupo** (= maior id, para robôs
+  sozinhos; uma equipe tem grupo ≥ 1000) desvia a partir de 10 ciclos, e o
+  de menor só a partir de 30 (normalmente o outro já saiu da frente). A
+  comparação é com o grupo de quem está na célula que ele quer (guardado na
+  tentativa de reserva).
+- **Dentro da passagem que segura**, o robô desvia sempre com 10 ciclos (o
+  túnel precisa esvaziar; quem o bloqueia na boca costuma ser justamente quem
+  espera para entrar no outro sentido) e o desvio **nunca volta para trás**
+  no túnel (as células atrás dele viram obstáculo), para respeitar a mão única.
+- **Robô em DEFEITO** continua ocupando a(s) célula(s) dele (fisicamente
+  está ali); os outros desviam dele por este mecanismo.
+- **Seguidores** também usam a grade (entram livres nas células do próprio
+  grupo). Travados, dão um passo pelo caminho que evita os outros robôs, mas
+  esse desvio **nunca usa uma passagem** (quem paga a vaga é o líder; se o
+  líder já está do outro lado, o seguidor espera).
+- **Sem isso:** dois robôs frente a frente esperariam um pelo outro para
+  sempre (deadlock clássico: cada um segura uma célula e espera a do outro).
+  O desvio quebra a espera circular.
+
+### 8.5 Na tela
+- `atr/status`: cada robô tem `"bloqueado": true/false` (esperou célula ou
+  passagem neste ciclo; a Navegação passa à Status pelo `estado_local`) e cada
+  passagem tem `"dentro"` e `"sentido"` (lidos do monitor).
+- O robô bloqueado aparece com **borda tracejada amarela e um ícone de
+  pausa** (e "· aguardando" no card); a passagem ocupada tem uma **seta azul**
+  no chão do túnel apontando o sentido de quem está dentro.
+
+---
+
+## 9. Simplificações assumidas (citar no relatório)
 
 **Mapa e movimento**
-1. Colisão fora das passagens **não** é tratada: robôs podem ocupar a mesma célula.
+1. Anti-colisão (seção 8): células de estacionamento (baias, zonas,
+   estações) aceitam vários robôs sem controle; um destino de `goto` ocupado
+   por outro robô faz o robô esperar ao lado dele (desviando de vez em quando)
+   até a célula vagar.
 2. O mapa é sorteado só no início da execução; paredes, passagens e
    obstáculos não mudam enquanto o sistema roda.
 3. Obstáculos são células isoladas (1x1), nunca na linha y = 15, nas áreas
@@ -650,9 +806,9 @@ Organizador).
 4. `novo` e `goto` aceitam qualquer célula livre fora das passagens, sem
    conferir se ela é alcançável (ex.: cercada de obstáculos). Sem caminho, o
    robô registra "sem caminho ate o destino" e fica parado.
-5. O custo dinâmico só conta robôs **dentro** das passagens, e com uma
-   leitura instantânea (`sem_getvalue`) que pode ficar desatualizada; robôs
-   no caminho fora das passagens não entram no custo.
+5. O custo dinâmico só conta robôs **dentro** das passagens (e o sentido
+   deles), com uma leitura instantânea que pode ficar desatualizada; robôs no
+   caminho fora das passagens só entram no cálculo quando há travamento (desvio, 8.4).
 6. O replanejamento só acontece depois de 3 s esperando na porta. Se não há
    desvio melhor, sai o mesmo caminho e ele replaneja de novo a cada 3 s
    (um evento "replanejou rota" a cada vez).
@@ -679,8 +835,12 @@ Organizador).
 15. O estado visto por fora (buffer) tem até 200 ms de atraso em relação ao
     estado interno do robô (ex.: logo depois do `SOLTAR` ainda aparece `OPERANDO_CARGA`).
 16. A morte inesperada de um processo `robo` não é detectada (o slot continua ativo).
-17. Na disputa por uma passagem cheia não há fila de ordem: quem conseguir o
-    semáforo primeiro entra (o `sem_timedwait` tenta de novo a cada ciclo).
+17. Mão única: `esperando[]` é um booleano por sentido (não um contador).
+    Um robô que desiste de esperar (replaneja por outra passagem) deixa o
+    `true` até alguém daquele sentido entrar; o efeito é só que, no sentido
+    atual, os próximos param de entrar e esperam o túnel esvaziar (nunca trava,
+    porque com `dentro == 0` qualquer um entra). Entre robôs do MESMO sentido
+    esperando, quem tentar primeiro entra.
 
 **Simulador**
 18. 1 célula por tick (100 ms); bateria cai 1% a cada 5 células e sobe 2% por
@@ -718,7 +878,7 @@ Organizador).
 
 ---
 
-## 9. Cenários de teste
+## 10. Cenários de teste
 
 Rodar todos (salva em `testes/saidas/`):
 
@@ -734,8 +894,8 @@ Como o mapa é sorteado, o script fixa a semente: **42** nos cenários 1–4 (a
 mesma do vídeo), **1 e 2** no cenário 5 (que roda duas vezes:
 `cenario5_semente1` e `cenario5_semente2`) e **5** no cenário 6 (na semente
 42 a passagem de capacidade 1 fica sozinha numa parede, sem outra para o
-replanejamento escolher; na 5 ela divide a parede 1 com a P1) e **42** no
-cenário 7.
+replanejamento escolher; na 5 ela divide a parede 1 com a P1) e **42** nos
+cenários 7 a 10.
 
 | Cenário | O que testa |
 |---|---|
@@ -746,6 +906,9 @@ cenário 7.
 | 5 | Mesmo arquivo com sementes 1 e 2: o comando `mapa` mostra passagens (posição e capacidade) e obstáculos diferentes, e nos dois mapas o robô entrega a caixa da baia 2 na zona D. |
 | 6 | Passagem de capacidade 1 (P2) disputada: o robô 0 fica sem bateria dentro dela (segura a vaga); o robô 1 espera na porta e, depois de 3 s, "replanejou rota: passagem P2 cheia" e atravessa pela P1. |
 | 7 | Bateria suficiente para a tarefa inteira: robôs longe da baia com 31%, 35% e 38% não são escolhidos para a caixa (tam 3, baia 1 → zona A), recebem `RECARREGAR` e só depois de recarregar formam a equipe; com 5 robôs e 12 caixas por ~3 min nenhum robô chega a 0% (o script avisa se houver DEFEITO). Com o código antigo o robô 2 chegava a 0% a caminho da baia. |
+| 8 | Anti-colisão, frente a frente: robôs 0 em (1,15) e 1 em (11,15), em manual, com `goto` em sentidos opostos na mesma linha. Nunca ocupam a mesma célula; o robô 1 (maior id) fica bloqueado e depois de 1 s "desviando de robo"; os dois chegam. O script confere o desvio, as 2 chegadas e zero `COLISAO`. |
+| 9 | Mão única na P1 (capacidade 4): robô 0 atravessa para a direita e robô 1 para a esquerda. Há vaga no semáforo, mas o robô 1 fica "esperando passagem P1 (cheia ou na contramao)" até o robô 0 sair; só então "entrou na passagem P1 (para a esquerda)". Ninguém trava, zero `COLISAO`. |
+| 10 | 6 robôs pedindo a mesma posição padrão (o Gestor põe cada um na célula livre mais próxima, BFS) e 6 caixas de tamanho 1 ao mesmo tempo: as 6 entregues, sem timeout e sem `COLISAO` (o script confere as duas coisas). |
 
 Os cenários usam `aguarda <id> <ESTADO> [timeout_s]` (espera o robô chegar a
 um estado, lendo o buffer de status a cada 100 ms) em vez de `espera` sempre

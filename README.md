@@ -34,6 +34,12 @@ mostra o mapa em texto. Para o vídeo e os testes use a semente 42:
 ATR_SEMENTE=42 ./logistica
 ```
 
+**Anti-colisão descentralizada (ponto extra +2):** cada robô, na própria
+thread de Navegação, reserva a próxima célula numa grade de ocupação na
+memória compartilhada antes de andar; as passagens são de mão única (monitor
++ semáforo); robôs travados frente a frente desviam com desempate pelo id. O
+Organizador não participa. Detalhes em `docs/EXPLICACAO.md`, seção 8.
+
 O comando `historico [n]` devolve as últimas n linhas (padrão 30, máx. 100)
 de `logs/eventos.csv` e `logs/cargas.csv`; na tela, botão "Carregar histórico
 do disco" no painel Eventos.

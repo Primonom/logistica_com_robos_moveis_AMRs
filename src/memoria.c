@@ -6,7 +6,8 @@
  *   - processo de cada robô (robo):  abrir_memoria() e fechar_memoria().
  *
  * Sincronização: inicializa os mutexes que ficam dentro da memória
- * compartilhada com o atributo PTHREAD_PROCESS_SHARED. Sem esse atributo,
+ * compartilhada (robôs, caixas, grade de ocupação e monitores das
+ * passagens) com o atributo PTHREAD_PROCESS_SHARED. Sem esse atributo,
  * um mutex só funciona entre threads do MESMO processo; como o processo
  * central e os processos robo acessam os mesmos dados, ele é obrigatório.
  */
@@ -60,6 +61,11 @@ MemoriaCompartilhada *criar_memoria(void)
         m->robos[i].carga_id = -1;
     }
     iniciar_mutex_compartilhado(&m->mutex_caixas);
+    /* Anti-colisão: a grade e os monitores começam zerados pelo memset
+     * (n = 0 em toda célula, dentro = 0, ninguém esperando). */
+    iniciar_mutex_compartilhado(&m->ocupacao.mutex);
+    for (i = 0; i < N_PASSAGENS; i++)
+        iniciar_mutex_compartilhado(&m->monitor[i].mutex);
     m->n_caixas = 0;
     m->caixa_em_espera = -1;
     m->robos_livres_espera = 0;
@@ -102,6 +108,9 @@ void destruir_memoria(MemoriaCompartilhada *m)
     for (i = 0; i < MAX_ROBOS; i++)
         pthread_mutex_destroy(&m->robos[i].mutex);
     pthread_mutex_destroy(&m->mutex_caixas);
+    pthread_mutex_destroy(&m->ocupacao.mutex);
+    for (i = 0; i < N_PASSAGENS; i++)
+        pthread_mutex_destroy(&m->monitor[i].mutex);
 
     fechar_memoria(m);
     if (shm_unlink(NOME_SHM) == -1) { perror("shm_unlink"); exit(1); }

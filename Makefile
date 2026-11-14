@@ -9,9 +9,9 @@ LIBS_LOGISTICA = $(LIBS) -lmosquitto   # só o processo central usa MQTT
 
 OBJ_LOGISTICA = src/main.o src/memoria.o src/coletor.o src/eventos.o src/gestor.o \
                 src/console.o src/simulador.o src/mapa.o src/organizador.o \
-                src/ponte_mqtt.o
+                src/ponte_mqtt.o src/ocupacao.o
 OBJ_ROBO      = src/robo_main.o src/memoria.o src/eventos.o src/status.o \
-                src/navegacao.o src/mapa.o
+                src/navegacao.o src/mapa.o src/ocupacao.o
 
 all: logistica robo
 

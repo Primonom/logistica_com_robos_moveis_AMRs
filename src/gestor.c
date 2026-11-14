@@ -3,8 +3,11 @@
  *
  * Thread: tarefa_gestor (uma só).
  *   Espera pedidos de "novo robô". Para cada pedido: escolhe um id livre,
- *   prepara o slot do robô na memória compartilhada, cria a fila
- *   /atr_robo_<id> e cria o PROCESSO do robô com fork() + execl("./robo").
+ *   escolhe a célula LIVRE mais próxima da posição pedida (BFS na grade de
+ *   ocupação, anti-colisão) e já a reserva para o robô, prepara o slot do
+ *   robô na memória compartilhada, cria a fila /atr_robo_<id> e cria o
+ *   PROCESSO do robô com fork() + execl("./robo"). A mensagem "robo
+ *   criado" informa a posição REAL (pode ser vizinha da pedida).
  *
  * Quem produz os pedidos (via pedir_novo_robo()): o Console (comando
  * "novo", usado nos cenários de teste) e a ponte MQTT (tópico
@@ -19,6 +22,10 @@
  *       * cond_pedidos: o Gestor DORME enquanto a fila está vazia (não gasta
  *         CPU) e quem coloca um pedido (Console ou ponte) o ACORDA.
  *   - Mutex de cada robô (na memória compartilhada) ao mexer no slot.
+ *   - Mutex da grade de ocupação (reservar_livre_perto, ocupacao.c): a BFS
+ *     e a reserva acontecem sob o mesmo lock, então nenhum robô entra na
+ *     célula entre a escolha e a reserva. Nunca junto com o mutex do robô
+ *     (a reserva termina antes de iniciar_slot).
  *   - enviar_para_robo(): manda uma mensagem pela fila /atr_robo_<id>
  *     (usada pelo Console e pelo Organizador).
  *   - O Organizador fica sabendo do robô novo de forma ASSÍNCRONA: o Gestor
@@ -135,8 +142,10 @@ static void iniciar_slot(int id, int x, int y)
     r->destino_x = -1;          /* sem rota */
     r->destino_y = -1;
     r->n_rota = 0;
+    r->bloqueado = false;
     r->modo_automatico = true;
     r->carga_id = -1;
+    r->grupo = id;              /* sozinho: grupo anti-colisão = id */
     r->pid = 0;
     r->ativo = true;  /* a partir daqui o Organizador "vê" o robô */
     pthread_mutex_unlock(&r->mutex);
@@ -203,6 +212,7 @@ static void atender_pedido(Pedido p)
 {
     char texto[128];
     int id = escolher_id_livre();
+    int x, y;
     pid_t pid;
 
     if (id == -1) {
@@ -210,7 +220,15 @@ static void atender_pedido(Pedido p)
         printf("Gestor: sem id livre (maximo %d robos)\n", MAX_ROBOS);
         return;
     }
-    iniciar_slot(id, p.x, p.y);
+    /* Anti-colisão: a célula pedida pode já ter robô; usa a livre mais
+     * perto (BFS) e já a reserva com o grupo do robô novo (= id). */
+    x = p.x;
+    y = p.y;
+    if (!reservar_livre_perto(&x, &y, id)) {
+        registrar_evento(fila_coletor, -1, "pedido de novo robo recusado: sem celula livre");
+        return;
+    }
+    iniciar_slot(id, x, y);
     criar_fila_robo(id);
     pid = criar_processo_robo(id);
 
@@ -223,9 +241,13 @@ static void atender_pedido(Pedido p)
     pthread_mutex_unlock(&mutex_novos);
 
     snprintf(texto, sizeof(texto), "robo criado (pid %d) em (%d,%d)",
-             (int)pid, p.x, p.y);
+             (int)pid, x, y);
     registrar_evento(fila_coletor, id, texto);
-    printf("Gestor: robo %d criado (pid %d) em (%d,%d)\n", id, (int)pid, p.x, p.y);
+    if (x != p.x || y != p.y)
+        printf("Gestor: (%d,%d) ocupada; robo %d criado (pid %d) em (%d,%d)\n",
+               p.x, p.y, id, (int)pid, x, y);
+    else
+        printf("Gestor: robo %d criado (pid %d) em (%d,%d)\n", id, (int)pid, x, y);
 }
 
 /* CONSUMIDOR: thread do Gestor. */

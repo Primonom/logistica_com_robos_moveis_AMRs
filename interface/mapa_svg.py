@@ -12,7 +12,8 @@ os desenhos ("carimbos") de desenhos.py:
                                        caminho real é o A*, pelas passagens.)
   svg_vivo(mapa, status, selecionado, direcoes, agora)
                                        a cada atualização: semáforos e
-                                       cancelas das passagens, luzes das
+                                       cancelas das passagens, seta do
+                                       sentido (mão única), luzes das
                                        baias, caixas, entregas, rota do
                                        selecionado, robôs, equipes e
                                        animações.
@@ -34,6 +35,7 @@ CELULA = 24
 MARGEM = 44
 ROBO = 42                    # lado do robô em px (passa da célula: "fofinho" e legível no vídeo)
 LADO_CAIXA = {1: 18, 2: 22, 3: 26, 4: 30}   # caixa pendente cresce com o tamanho
+COR_SETA = "#2563eb"         # seta do sentido (mão única) numa passagem ocupada
 
 
 # ---------- Coordenadas ----------
@@ -362,6 +364,7 @@ def svg_vivo(mapa, status, selecionado=None, direcoes=None, agora=0.0):
     if status is not None:
         p += _semaforos(mapa, status, agora)
         p += _todas_as_cancelas(mapa, status, fechadas=False)  # abertas: embaixo dos robôs
+        p += _setas_sentido(mapa, status)
         p += _luzes_das_baias(mapa, status)
         p += _caixas_nas_baias(mapa, status)
         p += _entregas(mapa, status)
@@ -402,6 +405,30 @@ def _semaforos(mapa, status, agora=0.0):
         # placa ao lado do semáforo, ainda em cima da parede
         texto = f"{pas['nome']}  {ocupadas}/{cap}"
         p += _placa(sx + 16 + (14 + 9.2 * len(texto)) / 2, sy, texto, luz)
+    return p
+
+
+def _setas_sentido(mapa, status):
+    """Mão única (anti-colisão no C): em cada passagem OCUPADA, uma seta no
+    chão do túnel no sentido de quem está dentro ("sentido" 0 = para a
+    direita, 1 = para a esquerda; "dentro" = robôs dentro, do monitor)."""
+    monitor = {x["nome"]: x for x in status["passagens"]}
+    p = []
+    for pas in mapa["passagens"]:
+        m = monitor.get(pas["nome"], {})
+        if m.get("dentro", 0) <= 0:
+            continue
+        x1, x2, ty = tunel(pas)
+        cy = px(ty) + CELULA / 2
+        ini, fim = px(x1) + 8, px(x2 + 1) - 8
+        lado = 1                                   # +1: ponta à direita
+        if m.get("sentido", 0) == 1:
+            ini, fim, lado = fim, ini, -1
+        base = fim - 12 * lado                     # onde a ponta começa
+        p.append(f'<g class="seta-sentido"><line x1="{ini}" y1="{cy}" x2="{base}" y2="{cy}" '
+                 f'stroke="{COR_SETA}" stroke-width="4" stroke-linecap="round"/>'
+                 f'<path d="M{base} {cy - 7} L{fim} {cy} L{base} {cy + 7} Z" fill="{COR_SETA}" '
+                 f'stroke="white" stroke-width="1.5" stroke-linejoin="round"/></g>')
     return p
 
 
@@ -618,9 +645,10 @@ def angulo(r, direcoes):
 
 def _robos_e_equipes(status, selecionado, direcoes, agora, placas):
     """Desenha as UNIDADES: um robô sozinho, ou uma equipe carregando (os
-    robôs + a caixa). Unidades na mesma célula (ex.: fila na porta de uma
-    passagem cheia — não há colisão fora das passagens) viram uma FILA, para
-    nada ficar escondido (ver _enfileirar)."""
+    robôs + a caixa). Unidades na mesma célula (só acontece nas células de
+    estacionamento — baia, zona, estação —, porque o anti-colisão do C não
+    deixa dois grupos na mesma célula) viram uma FILA, para nada ficar
+    escondido (ver _enfileirar)."""
     p = []
     for posicao, tipo, dados in _enfileirar(_unidades(status), direcoes):
         if tipo == "robo":
@@ -695,7 +723,9 @@ def robo(r, posicao, ang, selecionado=False, equipe=False, placa=True, bateria=T
          agora=0.0, placas=None):
     """Um robô: sombra, corpo girado na direção do movimento, LED de status
     (em pé), plaquinha com o id e barrinha de bateria. DEFEITO: halo
-    vermelho pulsando e LED piscando; RECARREGANDO: raio do LED pulsando."""
+    vermelho pulsando e LED piscando; RECARREGANDO: raio do LED pulsando;
+    "bloqueado" (esperando célula ou passagem, anti-colisão): borda
+    tracejada amarela e um ícone de pausa."""
     x, y = posicao
     cor = cores.do_estado(r["estado"])["cor"]
     m = ROBO / 2
@@ -719,6 +749,8 @@ def robo(r, posicao, ang, selecionado=False, equipe=False, placa=True, bateria=T
     elif r["estado"] == "RECARREGANDO":
         led = animado("atr-pulsa", led, agora)
     p.append(led)
+    if r.get("bloqueado") and r["estado"] != "DEFEITO":
+        p += aguardando(x, y, m)
     if bateria:
         p += _bateria(x - 16, y + m + 3, r["bateria"])
     if placa:   # com "placas", só anota: quem chama desenha todas no fim
@@ -727,6 +759,18 @@ def robo(r, posicao, ang, selecionado=False, equipe=False, placa=True, bateria=T
         else:
             placas.append((x + m - 3, y - m - 4, r["id"]))
     return p
+
+
+def aguardando(x, y, m):
+    """Robô esperando (célula ocupada ou passagem na contramão/cheia):
+    borda tracejada amarela e um ícone de pausa no canto de cima à esquerda."""
+    ix, iy = x - m + 2, y - m + 2
+    return [f'<circle class="aguardando" cx="{x}" cy="{y}" r="{m + 3}" fill="none" '
+            f'stroke="#f59e0b" stroke-width="3" stroke-dasharray="6 4"/>',
+            f'<circle cx="{ix}" cy="{iy}" r="9" fill="#fbbf24" stroke="{cores.CONTORNO}" '
+            f'stroke-width="2"/>',
+            f'<rect x="{ix - 4}" y="{iy - 4.5}" width="2.8" height="9" rx="1" fill="{cores.CONTORNO}"/>',
+            f'<rect x="{ix + 1.2}" y="{iy - 4.5}" width="2.8" height="9" rx="1" fill="{cores.CONTORNO}"/>']
 
 
 def _led(estado):
@@ -870,6 +914,10 @@ def svg_legenda():
     itens.append(f'<g transform="translate({x - MARGEM - CELULA / 2} {100 - MARGEM - CELULA / 2})">'
                  f'{obstaculo}</g>')
     itens.append(d.texto(x + 20, 100, "obstáculo", 14, ancora="start"))
-    largura = max(largura, x + 120)
+    x += 120
+    r = {"id": 1, "estado": "DESLOCANDO", "bateria": 80, "bloqueado": True}
+    itens += robo(r, (x + 10, 100), 0, placa=False, bateria=False)
+    itens.append(d.texto(x + 40, 100, "aguardando (célula ou passagem)", 14, ancora="start"))
+    largura = max(largura, x + 300)
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{largura:.0f}" height="136" '
             f'viewBox="0 0 {largura:.0f} 136">{d.defs()}{"".join(itens)}</svg>')

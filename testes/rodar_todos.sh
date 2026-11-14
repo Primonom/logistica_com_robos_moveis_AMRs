@@ -1,5 +1,5 @@
 #!/bin/bash
-# Roda os cenários 1 a 7 e salva os resultados em testes/saidas/:
+# Roda os cenários 1 a 10 e salva os resultados em testes/saidas/:
 #   cenarioN.txt          saída da tela (Console, Gestor, Organizador...)
 #   cenarioN_eventos.csv  linhas que o cenário acrescentou a logs/eventos.csv
 #   cenarioN_cargas.csv   linhas que o cenário acrescentou a logs/cargas.csv
@@ -10,7 +10,10 @@
 #   cenário 6:    semente 5 (passagem de capacidade 1 dividindo a parede
 #                 com outra passagem, para o replanejamento ter opção);
 #   cenário 7:    semente 42 (bateria suficiente para a tarefa inteira;
-#                 roda ~3 minutos e confere que nenhum robô chegou a 0%).
+#                 roda ~3 minutos e confere que nenhum robô chegou a 0%);
+#   cenários 8-10: semente 42 (anti-colisão, ponto extra +2: frente a
+#                 frente, mão única na passagem e 6 robôs ao mesmo tempo).
+#                 Conferem que o simulador não registrou nenhuma COLISAO.
 # Uso (de qualquer pasta): testes/rodar_todos.sh
 
 cd "$(dirname "$0")/.." || exit 1   # raiz do repositório
@@ -51,3 +54,24 @@ rodar 7 42 cenario7
 if grep -q "DEFEITO" testes/saidas/cenario7_eventos.csv; then
     echo "   AVISO: robo chegou a 0% de bateria (DEFEITO) no cenario 7"
 fi
+for n in 8 9 10; do
+    rodar $n 42 cenario$n
+    # Anti-colisão: o simulador registra "COLISAO" se dois robôs de grupos
+    # diferentes ficarem na mesma célula (fora de baia/zona/estação).
+    if grep -q "COLISAO" testes/saidas/cenario${n}_eventos.csv; then
+        echo "   AVISO: COLISAO registrada no cenario $n"
+    fi
+done
+# Cenário 8: um dos dois desviou e os dois chegaram.
+grep -q "desviando de robo" testes/saidas/cenario8_eventos.csv ||
+    echo "   AVISO: ninguem desviou no cenario 8"
+[ "$(grep -c "chegou ao destino" testes/saidas/cenario8_eventos.csv)" -eq 2 ] ||
+    echo "   AVISO: algum robo nao chegou no cenario 8"
+# Cenário 9: os dois atravessaram a P1 e chegaram.
+[ "$(grep -c "saiu da passagem P1" testes/saidas/cenario9_eventos.csv)" -eq 2 ] ||
+    echo "   AVISO: algum robo nao atravessou a P1 no cenario 9"
+[ "$(grep -c "chegou ao destino" testes/saidas/cenario9_eventos.csv)" -eq 2 ] ||
+    echo "   AVISO: algum robo nao chegou no cenario 9"
+# Cenário 10: as 6 caixas entregues.
+[ "$(wc -l < testes/saidas/cenario10_cargas.csv)" -eq 6 ] ||
+    echo "   AVISO: nem todas as 6 caixas foram entregues no cenario 10"

@@ -1,0 +1,26 @@
+# Cenário 8: anti-colisão — dois robôs frente a frente na mesma linha
+# (semente 42, corredor y = 15, sem obstáculos).
+#  - robô 0 em (1,15) e robô 1 em (11,15), os dois em modo manual;
+#  - goto 0 -> (10,15) e goto 1 -> (2,15): o caminho A* dos dois é a
+#    MESMA linha, em sentidos opostos;
+# Esperado:
+#  - a grade de ocupação impede que eles entrem na mesma célula: no meio
+#    da linha os dois ficam bloqueados (cada um quer a célula do outro);
+#  - desempate: o robô 1 (maior id) desvia depois de 10 ciclos (1 s),
+#    evento "desviando de robo"; o robô 0 só desviaria depois de 30;
+#  - os dois chegam ("chegou ao destino") e o simulador não registra
+#    nenhuma COLISAO (o rodar_todos.sh confere).
+novo 1 15
+novo 11 15
+aguarda 1 DISPONIVEL
+manual 0
+manual 1
+aguarda 0 MANUAL
+aguarda 1 MANUAL
+goto 0 10 15
+goto 1 2 15
+espera 1
+status
+espera 6
+status
+sair

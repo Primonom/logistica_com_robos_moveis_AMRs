@@ -91,7 +91,8 @@ typedef struct {
 
 /* Semáforos das passagens abertos NESTE processo (por abrir_semaforos_passagens).
  * POR QUE: os semáforos contadores limitam quantos robôs ficam em cada
- * passagem (a Navegação faz sem_timedwait/sem_post) e o A* lê a ocupação
+ * passagem (a Navegação faz sem_trywait/sem_post, dentro do monitor de
+ * mão única, ver ocupacao.c) e o A* lê a ocupação
  * com sem_getvalue. Este vetor de ponteiros é escrito uma vez, antes de
  * criar as threads do processo, e depois só lido: não precisa de mutex. */
 extern sem_t *sem_passagem[N_PASSAGENS];
@@ -101,6 +102,9 @@ void gerar_mapa(Mapa *m);                 /* processo central, antes das threads
 void abrir_semaforos_passagens(void);     /* cada processo, antes das threads */
 void fechar_semaforos_passagens(void);
 bool calcular_caminho(int x0, int y0, int xd, int yd, Caminho *c);  /* A* */
+bool calcular_caminho_evitando(int x0, int y0, int xd, int yd,
+                               const bool proibida[], Caminho *c); /* A* com células proibidas */
+int  sentido_de_entrada(int p, int x);    /* 0 = para a direita, 1 = para a esquerda */
 int  passagem_em(int x, int y);           /* índice da passagem ou -1 */
 bool dentro_de_passagem(int x, int y);
 bool celula_livre(int x, int y);          /* dentro do mapa e sem parede/obstáculo */

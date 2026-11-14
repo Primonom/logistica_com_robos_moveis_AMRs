@@ -112,8 +112,15 @@ typedef struct {
     int      n_rota;                /* próximos cantos do caminho (até 32): */
     int      rota_x[MAX_ROTA_STATUS], rota_y[MAX_ROTA_STATUS]; /* a tela desenha o caminho */
 
+    bool     bloqueado;        /* esperando célula (grade) ou passagem (monitor) */
+
     bool     modo_automatico;
     int      carga_id;         /* -1 se nenhuma */
+    /* Grupo anti-colisão (ver struct Ocupacao): id do robô, ou 1000 +
+     * carga_id numa equipe de transporte com mais de 1 robô. Escrito pela
+     * Navegação quando muda (como modo_automatico) e lido pelo simulador,
+     * que confere se houve colisão (ver simulador.c). */
+    int      grupo;
 } Robo;
 
 /* Situação de uma caixa. */
@@ -156,6 +163,41 @@ typedef struct {
     int lider;     /* -1 = sem equipe */
 } Caixa;
 
+/* ---------- Anti-colisão descentralizada (ponto extra +2, ocupacao.c) ---------- */
+
+/* Grupo de uma equipe de transporte com mais de 1 robô = GRUPO_EQUIPE +
+ * carga_id (os ids de robô vão de 0 a 15, então não se confundem). */
+#define GRUPO_EQUIPE 1000
+
+/* Grade de ocupação: quem está (ou reservou) cada célula.
+ * Cada robô segura no máximo 2 células: a atual e a próxima reservada. */
+typedef struct {
+    /* POR QUE: as threads de Navegação de TODOS os robôs (processos
+     * diferentes) testam e marcam células ao mesmo tempo; sem o mutex, dois
+     * robôs poderiam ver a mesma célula livre e entrar os dois (colisão).
+     * Um mutex só para a grade inteira: a seção crítica é minúscula (testar
+     * e marcar 1 ou 2 células); um mutex por célula seriam 1800 mutexes sem
+     * ganho real. PROCESS_SHARED por estar na memória compartilhada. */
+    pthread_mutex_t mutex;
+    int n[MAPA_ALTURA][MAPA_LARGURA];      /* quantos robôs estão/reservaram */
+    int grupo[MAPA_ALTURA][MAPA_LARGURA];  /* grupo de quem está (vale se n > 0) */
+} Ocupacao;
+
+/* Monitor de uma passagem (mão única: problema da "ponte de uma via").
+ * Sentido 0 = para a direita (entrou pela boca esquerda), 1 = para a esquerda.
+ * A CAPACIDADE continua sendo o semáforo /atr_passagem_<n>; o monitor só
+ * decide o SENTIDO. (O nome "Passagem" já é a geometria, em mapa.h.) */
+typedef struct {
+    /* POR QUE: dentro, sentido e esperando[] são lidos e mudados juntos
+     * pelos robôs que chegam às duas bocas; sem o mutex, dois robôs de
+     * sentidos opostos poderiam ver dentro == 0 ao mesmo tempo e entrar os
+     * dois (travando no meio do túnel). PROCESS_SHARED (memória compartilhada). */
+    pthread_mutex_t mutex;
+    int  dentro;         /* robôs (unidades) dentro agora */
+    int  sentido;        /* sentido de quem está dentro (vale se dentro > 0) */
+    bool esperando[2];   /* há alguém esperando para entrar neste sentido? */
+} MonitorPassagem;
+
 /* Conteúdo completo de /atr_shm. */
 typedef struct {
     Robo robos[MAX_ROBOS];
@@ -193,6 +235,11 @@ typedef struct {
      * Não precisa de mutex porque é uma única variável que só vai de false
      * para true (não há várias variáveis que precisam mudar juntas). */
     atomic_bool encerrar;
+
+    /* Anti-colisão: grade de ocupação e monitores das passagens (os
+     * mutexes e o POR QUE estão nas structs acima). */
+    Ocupacao        ocupacao;
+    MonitorPassagem monitor[N_PASSAGENS];
 } MemoriaCompartilhada;
 
 /* Um atômico só funciona entre PROCESSOS se for "lock-free" (implementado
@@ -281,6 +328,16 @@ void *tarefa_ponte_mqtt(void *arg);  /* thread (arg não usado) */
 void ponte_publicar(const char *topico, const char *texto); /* qualquer thread */
 void ponte_destruir(void);           /* main, DEPOIS de todas terminarem */
 
+/* ---------- ocupacao.c (anti-colisão; processo robo e Gestor) ---------- */
+bool estacionamento(int x, int y);   /* baia, zona ou estação: aceita vários robôs */
+bool reservar_celula(int x, int y, int grupo, int *grupo_ocupante);
+void liberar_celula(int x, int y);
+bool reservar_livre_perto(int *x, int *y, int grupo);  /* Gestor: BFS */
+void copiar_ocupadas(int meu_grupo, bool ocupada[]);   /* desvio: células de outros */
+bool entrar_passagem(int p, int sentido);
+void sair_passagem(int p);
+void ler_monitor(int p, int *dentro, int *sentido);    /* A* e ponte MQTT */
+
 /* ---------- simulador.c (processo central) ---------- */
 void *tarefa_simulador(void *arg);   /* thread (arg não usado) */
 
@@ -302,6 +359,7 @@ typedef struct {
                                    * (-1 = sem rota), publicado no buffer */
     int    n_rota;                /* Navegação -> Status: próximos cantos do caminho */
     int    rota_x[MAX_ROTA_STATUS], rota_y[MAX_ROTA_STATUS];
+    bool   bloqueado;             /* Navegação -> Status: esperando célula/passagem */
 } EstadoLocal;
 
 extern EstadoLocal estado_local;

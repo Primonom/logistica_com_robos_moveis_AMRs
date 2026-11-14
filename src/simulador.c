@@ -21,13 +21,23 @@
  *   - se está numa estação de recarga, recarrega a bateria;
  *   - i_carga_atracada passa a valer o_acoplar_e_erguer (a garra "obedece"
  *     no ciclo seguinte ao comando).
+ * Depois, CONFERE COLISÕES (teste do anti-colisão, ponto extra +2): lê a
+ * posição (hw) e o grupo de todos os robôs e, se dois robôs de grupos
+ * diferentes estão na mesma célula que não é de estacionamento, registra
+ * o evento "COLISAO" (uma vez por encontro). Os cenários 8, 9 e 10 têm de
+ * terminar sem nenhum (o rodar_todos.sh confere). Ler o hw aqui é a
+ * exceção documentada: o simulador É o hardware.
  *
  * Sincronização:
  *   - mutex de cada robô (PTHREAD_PROCESS_SHARED): o slot é lido/escrito
  *     também pelo processo robo (Status e Navegação) e pelo Console; o mutex
  *     garante que x, y, bateria etc. mudem juntos (ninguém lê pela metade).
  *   - clock_nanosleep com tempo absoluto para o período (ver somar_ms).
- *   - celulas_andadas[] só é usado por esta thread: não precisa de mutex.
+ *   - celulas_andadas[] e em_colisao[][] só são usados por esta thread:
+ *     não precisam de mutex.
+ *   - conferir colisões: um mutex de robô por vez (copia x, y e grupo
+ *     para vetores locais e solta antes do próximo); a comparação é feita
+ *     depois, sem nenhum mutex. Regra anti-deadlock: nunca dois juntos.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -39,6 +49,7 @@
 #define RECARGA_POR_CICLO    2  /* na estação, sobe 2% por ciclo (100 ms) */
 
 static int celulas_andadas[MAX_ROBOS]; /* só esta thread usa */
+static bool em_colisao[MAX_ROBOS][MAX_ROBOS]; /* par já registrado (só esta thread) */
 
 /* Anda 1 célula em direção ao setpoint (x primeiro, depois y).
  * Retorna true se andou. Chamada com o mutex do robô travado. */
@@ -69,6 +80,37 @@ static void simular_robo(int id, Hardware *hw)
     hw->i_carga_atracada = hw->o_acoplar_e_erguer;
 }
 
+/* Dois robôs de grupos diferentes na mesma célula (fora das células de
+ * estacionamento) = colisão. Registra cada encontro uma vez só. */
+static void conferir_colisoes(void)
+{
+    int x[MAX_ROBOS], y[MAX_ROBOS], grupo[MAX_ROBOS];
+    bool ativo[MAX_ROBOS], junto;
+    char texto[128];
+    int i, j;
+
+    for (i = 0; i < MAX_ROBOS; i++) {
+        pthread_mutex_lock(&mem->robos[i].mutex);
+        ativo[i] = mem->robos[i].ativo;
+        x[i] = mem->robos[i].hw.i_posicao_x;
+        y[i] = mem->robos[i].hw.i_posicao_y;
+        grupo[i] = mem->robos[i].grupo;
+        pthread_mutex_unlock(&mem->robos[i].mutex);
+    }
+    for (i = 0; i < MAX_ROBOS; i++)
+        for (j = i + 1; j < MAX_ROBOS; j++) {
+            junto = ativo[i] && ativo[j] && x[i] == x[j] && y[i] == y[j] &&
+                    grupo[i] != grupo[j] && !estacionamento(x[i], y[i]);
+            if (junto && !em_colisao[i][j]) {
+                snprintf(texto, sizeof(texto), "COLISAO: robos %d e %d em (%d,%d)",
+                         i, j, x[i], y[i]);
+                registrar_evento(fila_coletor, -1, texto);
+                printf("Simulador: %s\n", texto);
+            }
+            em_colisao[i][j] = junto;
+        }
+}
+
 void *tarefa_simulador(void *arg)
 {
     struct timespec proximo;
@@ -83,6 +125,7 @@ void *tarefa_simulador(void *arg)
                 simular_robo(i, &mem->robos[i].hw);
             pthread_mutex_unlock(&mem->robos[i].mutex);
         }
+        conferir_colisoes();
         somar_ms(&proximo, PERIODO_SIMULADOR_MS);
         clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &proximo, NULL);
     }

@@ -18,7 +18,9 @@
  *               (nome, capacidade, celulas do túnel e regiao). "Retained":
  *               o broker guarda a última cópia e entrega a quem assinar
  *               depois. Publicado a cada conexão.
- *   atr/status  (publica) JSON com robôs, caixas, passagens, a caixa que o
+ *   atr/status  (publica) JSON com robôs (com "bloqueado": esperando célula
+ *               ou passagem), caixas, passagens (com "dentro" e "sentido"
+ *               do monitor de mão única), a caixa que o
  *               Organizador está esperando (e quantos robôs livres havia) e
  *               contadores.
  *   atr/comando (assina) uma linha de comando igual à do Console; é
@@ -50,6 +52,8 @@
  *     (montar texto é lento; não vale segurar o robô parado por isso).
  *   - mem->mutex_caixas: copia o vetor de caixas de uma vez, pelo mesmo motivo.
  *   - mem->mapa: só leitura, sem mutex (não muda depois de gerado).
+ *   - monitor de mão única das passagens (ler_monitor, ocupacao.c): copia
+ *     dentro/sentido com o mutex do monitor, um por vez, só para exibir.
  *   - sem_getvalue nos semáforos das passagens (sem_passagem[], abertos
  *     pelo main antes das threads): é só uma leitura instantânea
  *     para EXIBIÇÃO (o valor pode mudar logo depois); não serve para decidir
@@ -255,12 +259,14 @@ static int json_robos(Json *j, const Caixa caixas[], int n_caixas)
         /* Daqui para baixo só a cópia (r) é usada, já fora do mutex. */
         json_add(j, "%s{\"id\":%d,\"estado\":\"%s\",\"modo\":\"%s\",\"x\":%d,\"y\":%d,"
                  "\"sp_x\":%d,\"sp_y\":%d,\"destino_x\":%d,\"destino_y\":%d,"
-                 "\"bateria\":%d,\"distancia\":%.0f,\"carga\":%d,\"lider\":%d",
+                 "\"bateria\":%d,\"distancia\":%.0f,\"carga\":%d,\"lider\":%d,"
+                 "\"bloqueado\":%s",
                  n > 0 ? "," : "", i, nome_estado(r.e_estado),
                  r.modo_automatico ? "auto" : "manual", r.e_posicao_x, r.e_posicao_y,
                  r.j_sp_posicao_x, r.j_sp_posicao_y, r.destino_x, r.destino_y,
                  r.bateria, r.distancia_total, r.carga_id,
-                 r.carga_id == -1 ? -1 : lider_da_carga(r.carga_id, caixas, n_caixas));
+                 r.carga_id == -1 ? -1 : lider_da_carga(r.carga_id, caixas, n_caixas),
+                 r.bloqueado ? "true" : "false");
         json_rota(j, &r);
         n++;
     }
@@ -306,18 +312,22 @@ static void json_caixas(Json *j, const Caixa caixas[], int n,
     json_add(j, "]");
 }
 
-/* Ocupação das passagens: livres = valor atual do semáforo. */
+/* Ocupação das passagens: livres = valor atual do semáforo; dentro e
+ * sentido (0 = para a direita, 1 = para a esquerda) = monitor de mão única. */
 static void json_passagens(Json *j)
 {
-    int i, livres;
+    int i, livres, dentro, sentido;
 
     json_add(j, ",\"passagens\":[");
     for (i = 0; i < N_PASSAGENS; i++) {
         /* Leitura instantânea, só para exibir (ver comentário do topo). */
         if (sem_getvalue(sem_passagem[i], &livres) == -1)
             livres = -1;
-        json_add(j, "%s{\"nome\":\"P%d\",\"capacidade\":%d,\"livres\":%d}",
-                 i > 0 ? "," : "", i + 1, mem->mapa.passagens[i].capacidade, livres);
+        ler_monitor(i, &dentro, &sentido);
+        json_add(j, "%s{\"nome\":\"P%d\",\"capacidade\":%d,\"livres\":%d,"
+                 "\"dentro\":%d,\"sentido\":%d}",
+                 i > 0 ? "," : "", i + 1, mem->mapa.passagens[i].capacidade, livres,
+                 dentro, sentido);
     }
     json_add(j, "]");
 }
