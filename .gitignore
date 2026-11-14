@@ -4,3 +4,4 @@ robo
 logs/
 interface/.venv/
 __pycache__/
+*.msi

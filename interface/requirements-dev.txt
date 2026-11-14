@@ -1,5 +1,8 @@
-# Só para desenvolvimento: screenshots automáticos da tela (Playwright headless).
+# Só para desenvolvimento: testes (pytest) e screenshots automáticos da tela
+# (Playwright headless).
 # Não é necessário para rodar o sistema.
 #   interface/.venv/bin/pip install -r interface/requirements-dev.txt
 #   interface/.venv/bin/playwright install chromium
+# Testes: interface/.venv/bin/python -m pytest -q interface
+pytest==9.2.0
 playwright==1.63.0
