@@ -5,3 +5,6 @@ logs/
 interface/.venv/
 __pycache__/
 *.msi
+
+# ZIP da entrega (./empacotar.sh)
+ATR_TrabalhoFinal.zip

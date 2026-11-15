@@ -8,3 +8,5 @@ pytest==9.2.0
 playwright==1.63.0
 # Gráficos da análise de escalabilidade (testes/analisar_escalabilidade.py)
 matplotlib==3.10.7
+# PDFs da documentação (docs/gerar_pdf.py): pandoc empacotado, sem LaTeX
+pypandoc_binary==1.17

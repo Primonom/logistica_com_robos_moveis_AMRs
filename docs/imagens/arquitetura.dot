@@ -1,0 +1,63 @@
+// Arquitetura do sistema (fonte da figura docs/imagens/arquitetura.png).
+// Gerar o PNG: interface/.venv/bin/python docs/gerar_pdf.py (ver README).
+// Caixas = threads; cilindros = dados compartilhados; caixas duplas = objetos de IPC.
+digraph arquitetura {
+    graph [rankdir=TB, fontname="DejaVu Sans", fontsize=13, nodesep=0.25, ranksep=0.7,
+           compound=true, newrank=true, splines=true];
+    node  [fontname="DejaVu Sans", fontsize=11, shape=box, style="rounded,filled",
+           fillcolor="#e8eef7", color="#12355b"];
+    edge  [fontname="DejaVu Sans", fontsize=9, color="#444444"];
+
+    subgraph cluster_central {
+        label=<<b>Processo central ./logistica</b> (C11, POSIX; src/main.c)>;
+        style="rounded,filled"; fillcolor="#fff8dc"; color="#c9a227";
+        CON [label=<Console (thread principal)<br/><font point-size="9">console.c: executar_console</font>>];
+        GES [label=<<b>Tarefa 1 — Gestor de Robôs</b><br/><font point-size="9">gestor.c: tarefa_gestor<br/>esporádica: fila + mutex + var. de condição</font>>];
+        ORG [label=<<b>Tarefa 5 — Organizador da Logística</b><br/><font point-size="9">organizador.c: tarefa_organizador<br/>periódica T3 = 500 ms</font>>];
+        SIM [label=<<b>Tarefa 8 — Simulação do hardware</b><br/><font point-size="9">simulador.c: tarefa_simulador<br/>periódica T = 100 ms</font>>];
+        PON [label=<<b>Ponte MQTT</b><br/><font point-size="9">ponte_mqtt.c: tarefa_ponte_mqtt (T = 200 ms)<br/>+ thread de rede da libmosquitto</font>>];
+        COL [label=<<b>Tarefa 6 — Coletor de Dados</b><br/><font point-size="9">coletor.c: tarefa_coletor<br/>esporádica: mq_receive</font>>];
+    }
+
+    subgraph cluster_robo {
+        label=<<b>Tarefa 2 — Processo ./robo N</b> (C11; um por robô; fork + execl)>;
+        style="rounded,filled"; fillcolor="#eaf7ea"; color="#2e7d32";
+        NAV [label=<<b>Tarefa 3 — Comando de Navegação</b><br/><font point-size="9">navegacao.c: tarefa_navegacao<br/>T1 = 100 ms · A* · anti-colisão</font>>];
+        LOC [shape=cylinder, fillcolor="#ffffff", label=<estado_local<br/><font point-size="9">mutex comum (mesmo processo)</font>>];
+        STA [label=<<b>Tarefa 4 — Status do Robô</b><br/><font point-size="9">status.c: tarefa_status<br/>T2 = 200 ms</font>>];
+        NAV -> LOC [dir=both, arrowsize=0.6];
+        STA -> LOC [dir=both, arrowsize=0.6];
+    }
+
+    SHM [shape=cylinder, fillcolor="#ffffff", label=<<b>/atr_shm</b> — memória compartilhada POSIX<br/><font point-size="9">slots dos robôs: hw (Tabela 1) + buffer de status (Tabela 2)<br/>mapa sorteado · fila de caixas · grade de ocupação<br/>monitores das passagens · medições de tempo<br/>mutexes PTHREAD_PROCESS_SHARED · atomic_bool encerrar</font>>];
+    FR  [shape=box, style="filled", peripheries=2, fillcolor="#ffffff", label=<filas POSIX<br/><b>/atr_robo_N</b>>];
+    SEM [shape=box, style="filled", peripheries=2, fillcolor="#ffffff", label=<semáforos nomeados<br/><b>/atr_passagem_1..4</b><br/><font point-size="9">valor inicial = capacidade 1–4</font>>];
+    FC  [shape=box, style="filled", peripheries=2, fillcolor="#ffffff", label=<fila POSIX<br/><b>/atr_coletor</b><br/><font point-size="9">registrar_evento de todas<br/>as threads dos 2 processos</font>>];
+    DISCO [shape=cylinder, fillcolor="#ffffff", label=<logs/eventos.csv<br/>logs/cargas.csv>];
+    BRK [shape=hexagon, fillcolor="#fde2e2", color="#b71c1c", label=<<b>broker MQTT</b><br/>mosquitto :1883>];
+    TELA [fillcolor="#f3e5f5", color="#6a1b9a", label=<<b>Tarefas 7 e 9 — Tela de Operação</b><br/><b>+ tela do Simulador</b> (itens 5a–5d, 8a–8d)<br/><font point-size="9">Python 3 · NiceGUI · interface/app.py<br/>navegador, porta 8080</font>>];
+
+    CON -> GES [label="pedir_novo_robo"];
+    GES -> ORG [label="robos_novos\n(mutex)"];
+    GES -> NAV [label="fork + execl", lhead=cluster_robo, style=dashed];
+    ORG -> FR  [label="TAREFA_IR_BAIA, ACOPLAR,\nIR_ZONA, SOLTAR, PAUSAR,\nCONTINUAR, RECARREGAR"];
+    CON -> FR  [label="GOTO, MODO_MANUAL/AUTO"];
+    FR  -> NAV;
+    NAV -> SEM [label="sem_trywait /\nsem_post", dir=both];
+
+    SIM -> SHM [dir=both, label="hw"];
+    ORG -> SHM [dir=both, label="buffer de status,\ncaixas"];
+    PON -> SHM [dir=both, label="lê buffer"];
+    NAV -> SHM [dir=both, label="setpoint, grade,\nmonitor"];
+    STA -> SHM [dir=both, label="hw → buffer"];
+
+    ORG -> FC;
+    STA -> FC;
+    FC  -> COL;
+    COL -> DISCO [label="fprintf + fflush"];
+    COL -> BRK [label="atr/eventos"];
+    PON -> BRK [label="atr/mapa, atr/status,\natr/comando/resposta"];
+    BRK -> PON [label="atr/comando,\natr/robo/novo"];
+    PON -> GES [label="atr/robo/novo →\npedir_novo_robo", constraint=false];
+    BRK -> TELA [dir=both, label="MQTT"];
+}

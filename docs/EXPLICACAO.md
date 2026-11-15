@@ -1076,6 +1076,15 @@ quebram a **espera circular**.
     robôs já estão lá (o estacionamento aceita qualquer número; é uma
     abstração: um galpão real teria vagas).
 
+**Execução e entrega (seção 11)**
+36. `rodar.sh` decide se precisa iniciar o mosquitto só olhando se alguém
+    escuta a porta 1883 (`ss`); não confere se é mesmo um broker MQTT.
+37. Com `Ctrl+C` no `rodar.sh` o `./logistica` morre sem a limpeza do
+    `sair` (como em 22); a interface e o mosquitto iniciados pelo script são
+    encerrados mesmo assim (trap EXIT).
+38. `empacotar.sh` usa `git archive`: o ZIP leva só o que está commitado
+    (inclusive os PDFs); mudanças não commitadas ficam de fora (o script avisa).
+
 ---
 
 ## 10. Cenários de teste
@@ -1116,3 +1125,36 @@ um estado, lendo o buffer de status a cada 100 ms) em vez de `espera` sempre
 que o teste depende de um momento específico. Assim a sequência de decisões
 é sempre a mesma; mudam só horários, pids e a ordem de impressão de linhas
 de threads diferentes no mesmo instante.
+
+---
+
+## 11. Execução com um comando e empacotamento
+
+### 11.1 `rodar.sh` (instrução geral 5: "executar a partir de um único arquivo")
+- **Onde:** `rodar.sh`, na raiz.
+- **Problema:** o sistema tem três programas independentes (broker
+  mosquitto, núcleo em C e Tela de Operação em Python); rodar cada um num
+  terminal é fácil de errar e deixa processos órfãos.
+- **Como:** compila (`make`), inicia o mosquitto em segundo plano **só se**
+  ninguém escuta a 1883, inicia a interface em segundo plano (saída em
+  `logs/interface.log`) e roda o `./logistica` em **primeiro plano** (o
+  terminal vira o Console). Os pids dos processos de segundo plano ficam em
+  variáveis do script, e um `trap encerrar EXIT` mata **só o que ele
+  iniciou** quando o `./logistica` termina; `trap 'exit 130' INT TERM` faz o
+  Ctrl+C passar pelo mesmo caminho. Os robôs continuam sendo criados pelo
+  próprio `./logistica` (Gestor), não pelo script.
+- **Sem ele:** três terminais e, ao fechar, uma interface ou um broker
+  esquecidos rodando (a próxima execução encontraria a porta 8080 ocupada).
+- **Sem o `trap`:** no Ctrl+C o shell sairia sem matar a interface, porque
+  num script não interativo os processos em segundo plano ignoram o SIGINT.
+
+### 11.2 `empacotar.sh` e `docs/gerar_pdf.py` (entrega)
+- `empacotar.sh` gera `ATR_TrabalhoFinal.zip` com `git archive HEAD`: leva
+  exatamente o que está versionado (código, docs com os PDFs, testes e
+  `testes/saidas/`) e deixa de fora `.git`, executáveis, `*.o`,
+  `interface/.venv` e `logs/` (que estão no `.gitignore`).
+- `docs/gerar_pdf.py` gera `docs/imagens/arquitetura.png` (Graphviz em
+  WebAssembly, rodando no Chromium) e os PDFs `docs/RELATORIO.pdf` e
+  `docs/INSTRUCOES.pdf` (pandoc → HTML → Chromium). Não faz parte do sistema
+  e não tem sincronização.
+
