@@ -93,8 +93,11 @@ com todos na célula dele."
 
 ## 4. Passagem com capacidade (2:35–3:30)
 
-**Tela:** "Próximo ato ▶" (ato 2). Zoom no semáforo da P2 ficando vermelho e
-no robô parado na porta (borda tracejada amarela).
+**Tela:** "Próximo ato ▶" (ato 2). Os três robôs vão até a boca esquerda da
+P2; o primeiro fica sem bateria dentro do túnel (DEFEITO) e o segundo para
+atrás dele. Zoom no semáforo da P2 ficando vermelho (2/2) e no terceiro robô
+parado na porta (borda tracejada amarela). No "Próximo ato ▶" a bateria do
+primeiro é trocada, os dois saem e o terceiro atravessa.
 
 **Narração:** "A P2 tem capacidade 2. Cada robô faz `sem_trywait` antes de
 entrar: com a passagem cheia, o semáforo fica vermelho e o próximo espera na
@@ -238,3 +241,6 @@ Obrigado."
   `for n in 9 8; do ATR_SEMENTE=42 ./logistica testes/sem_caixas.txt < testes/cenario$n.txt; done`.
 - O cenário de demonstração precisa do sistema **recém-iniciado e sem
   caixas** (`testes/sem_caixas.txt`).
+- Se algo esperado num ato não acontecer em 30 s, a faixa mostra um aviso
+  "⚠ não aconteceu em 30 s" e libera "Próximo ato ▶": dá para seguir para o
+  próximo ato (e cortar o trecho na edição) sem reiniciar.

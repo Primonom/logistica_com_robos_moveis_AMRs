@@ -4,8 +4,9 @@ demonstracao.py — Cenário de demonstração (para gravar o vídeo).
 Cinco atos, em sequência; no fim de cada um o cenário PAUSA até o operador
 clicar "Próximo ato ▶" (tempo para narrar):
   1. Equipes se formando (escolhidas pelo caminho A*) e o acoplamento síncrono.
-  2. A passagem de capacidade 2 enchendo: semáforo vermelho, cancelas
-     fechadas e um robô esperando na porta.
+  2. A passagem de capacidade 2 enchendo: um robô sem bateria parado lá
+     dentro e outro atrás dele, semáforo vermelho, cancelas fechadas e um
+     terceiro esperando na porta.
   3. Uma caixa de tamanho 4 esperando robôs (faixa âmbar no painel Caixas).
   4. Falha de um seguidor: a equipe recebe PAUSAR e, com "ok", CONTINUAR.
   5. Um robô com bateria baixa indo recarregar.
@@ -14,6 +15,8 @@ O cenário NÃO decide nada pelo sistema: cria robôs como o simulador
 (atr/robo/novo, por enviar_novo_robo), envia as mesmas linhas de comando do
 Console ("caixa", "manual", "goto", "falha", "ok", "bateria"...) e ESPERA
 condições no status/eventos (como o comando "aguarda" do Console).
+Se uma condição não acontecer em AVISO_APOS_S (30 s), a faixa mostra um
+aviso e libera "Próximo ato ▶" para seguir mesmo assim (o vídeo não trava).
 Uma faixa no topo da página mostra o ato, a semente do mapa, o que observar
 e o que está esperando, e a página rola sozinha até o painel que importa no
 ato (o mapa, ou o painel Caixas no ato 3).
@@ -36,6 +39,7 @@ import time
 from nicegui import background_tasks, ui
 
 TOTAL_ATOS = 5
+AVISO_APOS_S = 30   # espera sem a condição: avisa e libera "Próximo ato ▶"
 
 
 class Encerrado(Exception):
@@ -112,12 +116,6 @@ class Demonstracao:
             await self._pausa()
         except Encerrado:
             pass
-        except TimeoutError as erro:
-            self._mostrar("Cenário interrompido", f"Demorou demais esperando: {erro}", "")
-            try:
-                await self._pausa()
-            except Encerrado:
-                pass
         finally:
             self.rodando = False
             self.faixa.set_visibility(False)
@@ -140,20 +138,34 @@ class Demonstracao:
         if self.cancelado:
             raise Encerrado()
 
-    async def _esperar(self, condicao, descricao, timeout=90):
+    async def _esperar(self, condicao, descricao):
         """Espera condicao(dados) ser verdadeira (dados = cópia do estado),
-        olhando a cada 0,2 s, como o "aguarda" do Console."""
+        olhando a cada 0,2 s, como o "aguarda" do Console. Se passar de
+        AVISO_APOS_S, avisa na faixa e libera "Próximo ato ▶": clicar segue o
+        roteiro mesmo sem a condição (devolve None), para o vídeo nunca travar."""
         self.b_proximo.set_enabled(False)
+        self.continuar.clear()
         self.esperando.set_text(f"⏳ esperando: {descricao}")
-        fim = time.monotonic() + timeout
-        while time.monotonic() < fim:
+        fim = time.monotonic() + AVISO_APOS_S
+        avisou = False
+        while True:
             if self.cancelado:
                 raise Encerrado()
-            resultado = condicao(self.estado.copia())
+            try:
+                resultado = condicao(self.estado.copia())
+            except (KeyError, IndexError, TypeError):  # robô/status ainda não existe
+                resultado = None
             if resultado:
+                self.b_proximo.set_enabled(False)
                 return resultado
+            if not avisou and time.monotonic() > fim:
+                avisou = True
+                self.esperando.set_text(f"⚠ não aconteceu em {AVISO_APOS_S} s: {descricao} — "
+                                        f"clique em “Próximo ato ▶” para seguir mesmo assim")
+                self.b_proximo.set_enabled(True)
+            if self.continuar.is_set():           # o operador pulou a espera
+                return None
             await asyncio.sleep(0.2)
-        raise TimeoutError(descricao)
 
     async def _evento(self, robo, trecho, desde):
         """Espera um evento novo (seq > desde) do robô com o trecho no texto."""
@@ -187,7 +199,10 @@ class Demonstracao:
             if len(novos) == len(posicoes) and all(r["estado"] == "DISPONIVEL" for r in novos.values()):
                 return sorted(novos)
             return None
-        return await self._esperar(prontos, f"{len(posicoes)} robô(s) novo(s) ficarem disponíveis")
+        ids = await self._esperar(prontos, f"{len(posicoes)} robô(s) novo(s) ficarem disponíveis")
+        if ids is None:    # pulado: segue com os que já existem
+            ids = sorted(i for i in self._robos(self.estado.copia()) if i not in antes)
+        return ids
 
     def _baia(self, numero):
         b = self.mapa["baias"][numero - 1]
@@ -234,35 +249,50 @@ class Demonstracao:
         pas, xe, xs, y = self._passagem(2)
         nome = pas["nome"]
         self._mostrar(f"Ato 2 de {TOTAL_ATOS} — Passagem enchendo ({nome}, capacidade 2)",
-                      f"Três robôs em modo manual vão atravessar a {nome}. Os dois primeiros estão com "
-                      f"1% de bateria: ela acaba dentro do túnel e eles param lá (DEFEITO), continuando "
-                      f"a ocupar a vaga. Com 2/2 o semáforo fica vermelho e as cancelas fecham; o "
-                      f"terceiro espera na porta. A cada 3 s de espera ele recalcula o A* (a passagem "
-                      f"cheia custa mais), mas aqui não há desvio que compense.", "")
-        # Perto das bocas não há obstáculo (raio 2), então estas células são livres.
-        # a e b ficam mais perto da boca que c: pegam as 2 vagas antes dele.
-        a, b, c = self.passagem = await self._criar([(xe - 2, y), (xe - 2, y - 1), (xe - 3, y + 2)])
+                      f"Três robôs em modo manual vão atravessar a {nome}. A bateria do primeiro acaba "
+                      f"dentro do túnel e ele para lá (DEFEITO), continuando a ocupar a vaga; o segundo "
+                      f"entra e para atrás dele (célula ocupada). Com 2/2 o semáforo fica vermelho e as "
+                      f"cancelas fecham; o terceiro espera na porta. A cada 3 s de espera ele recalcula "
+                      f"o A* (a passagem cheia custa mais), mas aqui não há desvio que compense.", "")
+        # Robô novo fora de um estacionamento sai sozinho para o mais próximo:
+        # por isso, depois do "manual", cada um vai por goto até a sua célula
+        # de partida, na linha da passagem (perto das bocas não há obstáculo,
+        # raio 2): a na porta, b logo atrás e c um pouco mais longe.
+        a, b, c = self.passagem = await self._criar([(xe - 2, y), (xe - 3, y), (xe - 3, y + 2)])
         for i in (a, b, c):
             self.enviar(f"manual {i}")
         await self._todos_em([a, b, c], "MANUAL", "os três ficarem em modo manual")
+        partida = {a: (xe - 1, y), b: (xe - 2, y), c: (xe - 3, y + 2)}
+        for i, (px, py) in partida.items():
+            self.enviar(f"goto {i} {px} {py}")
+        # espera pelo STATUS (não pelo evento "chegou"): posição e distância
+        # são copiadas juntas para o buffer, então a distância abaixo é a final
+        await self._esperar(lambda d: all((self._robos(d)[i]["x"], self._robos(d)[i]["y"]) == pos
+                                          for i, pos in partida.items()),
+                            "os três chegarem às células de partida")
+        # Bateria do a: o simulador gasta 1% a cada 5 células andadas (conta
+        # acumulada = "distancia" do status). Com d células andadas, a
+        # próxima queda é daqui a 5 - d % 5 células. Com 1% ele para depois
+        # dessas células; se for só 1 (ficaria na boca), 2% = mais 5.
+        # Partindo da porta (xe - 1), ele para entre xe + 1 e xe + 5: dentro.
+        d = int(self._robos(self.estado.copia())[a]["distancia"])
+        restam = 5 - d % 5
+        self.enviar(f"bateria {a} {1 if restam > 1 else 2}")
         desde = self._seq()
-        # 1% de bateria = para depois de 5 células: já dentro do túnel
-        self.enviar(f"bateria {a} 1")
-        self.enviar(f"bateria {b} 1")
         self.enviar(f"goto {a} {xs + 2} {y}")
-        self.enviar(f"goto {b} {xs + 2} {y - 1}")
-        await asyncio.sleep(0.3)
-        self.enviar(f"goto {c} {xs + 2} {y + 1}")
         await self._evento(a, f"entrou na passagem {nome}", desde)
+        await self._todos_em([a], "DEFEITO", f"a bateria do robô {a} acabar dentro da {nome}")
+        self.enviar(f"goto {b} {xs + 2} {y - 1}")   # não o destino do a (ocupado por ele)
         await self._evento(b, f"entrou na passagem {nome}", desde)
+        await asyncio.sleep(1)       # b chega atrás do a
+        self.enviar(f"goto {c} {xs + 2} {y + 1}")
         await self._evento(c, f"esperando passagem {nome}", desde)
         await self._pausa()
         self._mostrar(f"Ato 2 de {TOTAL_ATOS} — A passagem libera",
-                      f"Trocamos a bateria dos dois: eles voltam a andar e saem da {nome} (sem_post); "
-                      f"o robô que esperava consegue a vaga (sem_timedwait) e atravessa.", "")
+                      f"Trocamos a bateria do robô {a}: ele volta a andar, o {b} vai atrás e os dois "
+                      f"saem da {nome} (sem_post); o robô que esperava consegue a vaga e atravessa.", "")
         desde = self._seq()
         self.enviar(f"bateria {a} 100")
-        self.enviar(f"bateria {b} 100")
         await self._evento(c, "saiu da passagem", desde)
 
     async def _ato3_caixa_grande(self):
