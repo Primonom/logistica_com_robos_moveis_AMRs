@@ -1,5 +1,5 @@
 #!/bin/bash
-# Roda os cenários 1 a 10 e salva os resultados em testes/saidas/:
+# Roda os cenários 1 a 11 e salva os resultados em testes/saidas/:
 #   cenarioN.txt          saída da tela (Console, Gestor, Organizador...)
 #   cenarioN_eventos.csv  linhas que o cenário acrescentou a logs/eventos.csv
 #   cenarioN_cargas.csv   linhas que o cenário acrescentou a logs/cargas.csv
@@ -14,6 +14,8 @@
 #   cenários 8-10: semente 42 (anti-colisão, ponto extra +2: frente a
 #                 frente, mão única na passagem e 6 robôs ao mesmo tempo).
 #                 Conferem que o simulador não registrou nenhuma COLISAO.
+#   cenário 11:   semente 42 (o deadlock que o benchmark achou com 8
+#                 robôs: equipes cruzando P1/P3; equipe em bloco).
 # Uso (de qualquer pasta): testes/rodar_todos.sh
 
 cd "$(dirname "$0")/.." || exit 1   # raiz do repositório
@@ -54,7 +56,7 @@ rodar 7 42 cenario7
 if grep -q "DEFEITO" testes/saidas/cenario7_eventos.csv; then
     echo "   AVISO: robo chegou a 0% de bateria (DEFEITO) no cenario 7"
 fi
-for n in 8 9 10; do
+for n in 8 9 10 11; do
     rodar $n 42 cenario$n
     # Anti-colisão: o simulador registra "COLISAO" se dois robôs de grupos
     # diferentes ficarem na mesma célula (fora de baia/zona/estação).
@@ -75,3 +77,6 @@ grep -q "desviando de robo" testes/saidas/cenario8_eventos.csv ||
 # Cenário 10: as 6 caixas entregues.
 [ "$(wc -l < testes/saidas/cenario10_cargas.csv)" -eq 6 ] ||
     echo "   AVISO: nem todas as 6 caixas foram entregues no cenario 10"
+# Cenário 11: as 8 caixas entregues (sem o deadlock nas passagens).
+[ "$(wc -l < testes/saidas/cenario11_cargas.csv)" -eq 8 ] ||
+    echo "   AVISO: nem todas as 8 caixas foram entregues no cenario 11 (deadlock?)"

@@ -149,6 +149,8 @@ static void iniciar_slot(int id, int x, int y)
     r->modo_automatico = true;
     r->carga_id = -1;
     r->grupo = id;              /* sozinho: grupo anti-colisão = id */
+    r->celula_x = x;            /* célula da grade (a Navegação atualiza) */
+    r->celula_y = y;
     r->pid = 0;
     r->ativo = true;  /* a partir daqui o Organizador "vê" o robô */
     pthread_mutex_unlock(&r->mutex);

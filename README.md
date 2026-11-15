@@ -52,13 +52,15 @@ periódica, período, C médio/máximo, atraso máximo, perdas de prazo e
 U = Cmax/T (card "Tempo real" na tela); `tempos zerar` recomeça.
 `ATR_TEMPO_REAL=1` liga SCHED_FIFO com prioridades Rate Monotonic (precisa de
 permissão; no Docker o `compose.yaml` dá `SYS_NICE`). O benchmark
-`testes/escalabilidade.sh` (N = 1 a 64 robôs) e
+`testes/escalabilidade.sh` (N = 1 a 128 robôs, com vazão de entregas) e
 `interface/.venv/bin/python testes/analisar_escalabilidade.py` geram
 `docs/ESCALABILIDADE.md` com a resposta "quantos robôs cabem neste hardware".
 
 ## Docker
 
-Requisitos: Docker Desktop com integração WSL 2 habilitada e Docker Compose v2.
+Requisitos: Docker Desktop com integração WSL 2 habilitada, ou Docker dentro do
+WSL (`sudo apt install docker.io docker-compose-v2`, usuário no grupo `docker`,
+`sudo service docker start`), e Docker Compose v2.
 No PowerShell, a partir da raiz do repositório, inicie os serviços:
 
 ```powershell
@@ -70,7 +72,16 @@ Para fixar o mapa no Docker: `$env:ATR_SEMENTE=42; docker compose up --build`
 
 A interface fica em http://localhost:8080. O broker MQTT fica acessível apenas
 pela própria máquina em `localhost:1883`; internamente, os containers o acessam
-como `broker:1883`. Os logs CSV são gravados na pasta `logs/` do repositório.
+como `broker:1883`. Se a máquina já tem um mosquitto na 1883 (ex.: o do WSL,
+usado pelos testes), escolha outra porta no host: `ATR_PORTA_MQTT=1884 docker
+compose up --build`. Os logs CSV são gravados na pasta `logs/` do repositório.
+
+Benchmark em modo tempo real (SCHED_FIFO; o `compose.yaml` dá `SYS_NICE`),
+dentro do container, gravando em `testes/saidas/` do repositório:
+
+```bash
+docker compose run --rm -T -v ./testes:/app/testes logistica testes/escalabilidade.sh rt
+```
 
 Para encerrar a logística com limpeza, digite `sair` no terminal onde está
 rodando `docker compose up`. Depois, encerre os outros serviços com `Ctrl+C`

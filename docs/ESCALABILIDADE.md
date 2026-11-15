@@ -6,15 +6,78 @@
 
 ## Resposta
 
-**Com o hardware 13th Gen Intel(R) Core(TM) i5-13420H (12 núcleos lógicos, WSL2), o número máximo de robôs que mantém zero perdas de prazo e latência de falha abaixo de 300 ms (T_status + T_nav) é N = 64** — o maior valor testado (MAX_ROBOS = 64 é o limite do sistema). O processador não foi o gargalo: com 64 robôs a utilização total medida é U = 5.09, isto é, 42% da capacidade de 12 núcleos. Pela extrapolação linear de U(N) (seção Extrapolação), o limite do processador estaria bem acima disso.
+### a) Limite de processamento (CPU)
 
-Para comparação, se tudo rodasse em **um núcleo só**, a RTA com os C máximos medidos garante até **N = 8** (seção RTA). Os 12 núcleos são o que permite chegar a 64 sem perdas.
+Reta medida em N = 128 (o maior testado; Navegação e Status = pior robô):
+
+    U(N) = U_central + N·(C_nav/T_nav + C_status/T_status)
+
+| C usado | U_central | C_nav (µs) | C_status (µs) | custo por robô | N com U = 12 núcleos |
+|---|---|---|---|---|---|
+| máximo (pior caso) | 0.1059 | 4248 | 11696 | 0.10096 | **118** |
+| médio (carga típica) | 0.0097 | 30 | 1756 | 0.00908 | **1320** |
+
+Com o C máximo (pico de UM robô somado como se TODOS tivessem o pico em todo ciclo) a CPU encheria em N ≈ 118; com o C médio, em N ≈ 1320. Se tudo rodasse em **um núcleo só**, a RTA com os C máximos garante só até **N = 8** (seção RTA). É uma estimativa: o Organizador e o A* crescem mais que linearmente com a ocupação do mapa, e a reta ignora troca de contexto e cache.
+
+### b) Limite do software e do sistema operacional
+
+| recurso | uso com N robôs | limite | N máximo por esse recurso |
+|---|---|---|---|
+| `MAX_ROBOS` (comum.h, slots de /atr_shm, ids) | N | 128 | 128 (é só recompilar) |
+| filas POSIX (`/proc/sys/fs/mqueue/queues_max`) | N + 1 (/atr_robo_* + /atr_coletor) | 256 | 255 |
+| bytes de fila (`RLIMIT_MSGQUEUE`, `ulimit -q`) | ~1360 B por robô + 2560 B | 819200 B | 600 |
+| tarefas do Linux (`ulimit -u`: processos + threads) | 3 por robô (main, Navegação, Status) | 31141 | 10380 |
+| memória (RSS medido: média de `ps -o rss= -C robo` com N = 128; PSS ≈ 180 KB) | ~2.1 MB por robô | 7794 MB | 3627 |
+| `TAMANHO_JSON` (ponte MQTT) | ~600 B por robô + ~110 B por caixa | 256 KB | ~389 |
+
+Ao testar 96 e 128 robôs: 129 filas abertas, nenhum `mq_open` falhou, nenhum JSON descartado. A posição padrão (8,15) é estacionamento, então todos os robôs nasceram nela ("realocados" conta os que o Gestor teria posto em outra célula):
+
+| N | robôs realocados | pedidos recusados | COLISAO | perdas de prazo |
+|---|---|---|---|---|
+| 48 | 0 | 0 | 0 | 0 |
+| 64 | 0 | 0 | 0 | 0 |
+| 96 | 0 | 0 | 0 | 0 |
+| 128 | 0 | 0 | 0 | 0 |
+
+O primeiro limite do software é o próprio `MAX_ROBOS` = 128; o primeiro limite do SO que apareceria é o `queues_max` = 256 (no máximo 255 robôs, porque cada um tem a sua fila). Ele pode ser aumentado como root (`sysctl fs.mqueue.queues_max=...`), e aí o seguinte é o `RLIMIT_MSGQUEUE`.
+
+### c) Limite físico do galpão (vazão)
+
+Entregas por minuto e tempo médio de entrega (da atribuição, "indo para a baia", até o SOLTAR, pelos timestamps do Coletor), contando só as entregas dos últimos 40 s da janela de 60 s (os primeiros 20 s são aquecimento). A fila tem max(2N, 64) caixas e nunca esvaziou na janela (coluna "fila").
+
+| N | entregas na janela | entregas/min | tempo médio (s) | tempo máx (s) | fila |
+|---|---|---|---|---|---|
+| 1 | 2 | 3.0 | 17.5 | 18.5 | nunca vazia |
+| 2 | 2 | 3.0 | 24.0 | 28.0 | nunca vazia |
+| 4 | 1 | 1.5 | 35.1 | 35.1 | nunca vazia |
+| 8 | 4 | 6.0 | 26.4 | 33.5 | nunca vazia |
+| 12 | 7 | 10.5 | 26.1 | 35.5 | nunca vazia |
+| 16 | 6 | 9.0 | 22.7 | 30.0 | nunca vazia |
+| 24 | 8 | 12.0 | 19.9 | 23.5 | nunca vazia |
+| 32 | 9 | 13.5 | 17.7 | 23.5 | nunca vazia |
+| 48 | 9 | 13.5 | 18.8 | 23.5 | nunca vazia |
+| 64 | 10 | 15.0 | 17.7 | 23.5 | nunca vazia |
+| 96 | 10 | 15.0 | 17.7 | 23.5 | nunca vazia |
+| 128 | 10 | 15.0 | 17.7 | 23.5 | nunca vazia |
+
+![Vazão](imagens/escalabilidade_vazao.png)
+
+A vazão máxima foi 15.0 entregas/min. A partir de **N = 32** ela já está em 90% desse máximo, e a partir de N = 64 é exatamente a mesma: **mais robôs não aumentam a vazão**. O motivo é o galpão: há 4 baias e o Organizador põe **uma carga por baia de cada vez**, então no máximo 4 entregas andam ao mesmo tempo (de 4 a 16 robôs trabalhando; o tamanho médio das caixas é 2,5, mais os que estão recarregando). Os outros ficam DISPONIVEL **no estacionamento** (posição padrão, zonas, estações; ver docs/EXPLICACAO.md 8.6) e não atrapalham ninguém: com a semente fixa o Organizador escolhe sempre os mesmos robôs (os mais perto da baia), e por isso os números com N grande são iguais. Com N pequeno a vazão é menor e o tempo maior porque falta robô livre perto da baia (a caixa de tamanho 4 espera os 4, e cada robô volta da zona, do outro lado do mapa). Antes do estacionamento dos ociosos, com N = 128 os robôs parados em volta das baias travavam o galpão: zero entregas.
+
+### Conclusão
+
+**Com este hardware, o sistema garante corretude e responsividade para até N = 128 robôs; o fator que limita é o galpão, e não a CPU nem o SO: a partir de N ≈ 64 a vazão para de crescer (15 entregas/min, 4 baias com uma carga cada), e o primeiro limite rígido acima de 128 é o SO (255 robôs, pelas filas POSIX).**
+
+- N = 128 é o maior valor testado (= `MAX_ROBOS`), com zero perdas de prazo, latência da falha < 300 ms, zero COLISAO, nenhum pedido recusado e nenhum deadlock (todas as rodadas entregaram caixas até o fim).
+- A CPU tem folga: com 128 robôs a carga média é U = 1.17 de 12 núcleos. A reta com o C MÁXIMO chega aos 12 núcleos em N ≈ 118, abaixo do que foi medido sem perdas: ela soma o pico de cada tarefa (de robôs e instantes diferentes) como se todos acontecessem juntos em todo ciclo, o que não acontece. É um limite pessimista, não uma garantia de falha.
+- Para um só núcleo, a RTA com os C máximos garante só N = 8.
+- Robôs além de N ≈ 64 são gerenciáveis mas inúteis: ficam no estacionamento. Para aumentar a vazão seria preciso mudar o galpão (mais baias, ou mais de uma carga por baia), não o computador.
 
 ### Critério escolhido
 
 - **Corretude temporal = zero perdas de prazo** em TODAS as tarefas periódicas (deadline = período; uma perda é um ciclo que terminou depois de `proximo + T`). Se a Navegação perde prazo, o setpoint chega atrasado ao simulador e a anti-colisão (que decide passo a passo) trabalha com informação velha.
 - **Responsividade = latência do evento crítico < 300 ms.** O evento mais crítico é a falha de um robô: entre o hardware ligar `i_falha` e o robô estar PARADO passam, no pior caso, um período da Status (que detecta e publica DEFEITO) + um período da Navegação (que segura a posição): 200 + 100 = 300 ms. Medimos até o buffer mostrar DEFEITO (o que o Organizador e a tela enxergam); se isso passar de 300 ms é porque alguém atrasou além do projeto.
-- Os dois critérios têm de valer para o N e para todos os menores (escalabilidade monótona); cada N roda 60 s com 2N caixas sendo transportadas (cenário realista: equipes, passagens, recargas).
+- Os dois critérios têm de valer para o N e para todos os menores (escalabilidade monótona); cada N roda 60 s com max(2N, 64) caixas sendo transportadas (cenário realista: equipes, passagens, recargas).
 
 ## Resultados medidos (modo normal, SCHED_OTHER)
 
@@ -22,20 +85,43 @@ C e atraso em µs; Navegação e Status = pior robô. U(N) = Σ centrais + N·(C
 
 | N | C_nav méd/máx | C_status méd/máx | C_sim máx | C_org méd/máx | C_ponte máx | atraso máx (tarefa) | perdas | U(N) Cmáx / Cméd | lat. falha méd/máx (ms) |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | 27 / 3464 | 677 / 2659 | 40 | 862 / 8164 | 238 | 1061 (ponte_mqtt) | 0 | 0.066 / 0.006 | 97 / 199 |
-| 2 | 27 / 2270 | 239 / 3523 | 61 | 3484 / 14670 | 343 | 560 (status) | 0 | 0.112 / 0.010 | 98 / 196 |
-| 4 | 38 / 6983 | 828 / 6116 | 143 | 6026 / 20340 | 374 | 9121 (navegacao) | 0 | 0.446 / 0.031 | 115 / 200 |
-| 8 | 51 / 3592 | 1215 / 5936 | 172 | 6749 / 23020 | 439 | 9986 (navegacao) | 0 | 0.575 / 0.067 | 96 / 200 |
-| 12 | 58 / 5277 | 1185 / 5809 | 395 | 3106 / 18934 | 854 | 3890 (navegacao) | 0 | 1.028 / 0.085 | 97 / 186 |
-| 16 | 51 / 5494 | 1858 / 6440 | 433 | 1514 / 22629 | 498 | 1354 (navegacao) | 0 | 1.446 / 0.161 | 117 / 198 |
-| 24 | 56 / 4663 | 2307 / 7405 | 101 | 2537 / 31084 | 834 | 1890 (navegacao) | 0 | 2.075 / 0.297 | 116 / 200 |
-| 32 | 183 / 5711 | 2222 / 6413 | 164 | 2692 / 34961 | 534 | 4440 (navegacao) | 0 | 2.928 / 0.421 | 97 / 185 |
-| 48 | 218 / 5750 | 2234 / 6858 | 82 | 3901 / 46747 | 530 | 3483 (navegacao) | 0 | 4.503 / 0.650 | 97 / 181 |
-| 64 | 318 / 4175 | 2099 / 7259 | 191 | 2481 / 44205 | 782 | 3213 (status) | 0 | 5.089 / 0.882 | 92 / 181 |
+| 1 | 41 / 3407 | 129 / 2866 | 625 | 4328 / 20388 | 501 | 850 (organizador) | 0 | 0.098 / 0.012 | 113 / 198 |
+| 2 | 38 / 4584 | 294 / 4167 | 91 | 8787 / 43801 | 281 | 21290 (organizador) | 0 | 0.223 / 0.022 | 113 / 192 |
+| 4 | 39 / 5534 | 1294 / 5019 | 458 | 6766 / 17382 | 690 | 1420 (navegacao) | 0 | 0.365 / 0.042 | 96 / 191 |
+| 8 | 50 / 5938 | 1064 / 4961 | 348 | 8931 / 56120 | 517 | 1050 (simulador) | 0 | 0.792 / 0.066 | 114 / 197 |
+| 12 | 46 / 4819 | 1552 / 6102 | 192 | 2254 / 32035 | 732 | 1126 (navegacao) | 0 | 1.014 / 0.105 | 116 / 199 |
+| 16 | 69 / 6043 | 1987 / 5893 | 212 | 1318 / 34344 | 527 | 1233 (navegacao) | 0 | 1.512 / 0.174 | 115 / 194 |
+| 24 | 40 / 6165 | 1900 / 5558 | 171 | 2172 / 45842 | 466 | 1615 (navegacao) | 0 | 2.242 / 0.243 | 113 / 200 |
+| 32 | 30 / 3796 | 1955 / 5527 | 184 | 2648 / 38183 | 567 | 3156 (navegacao) | 0 | 2.180 / 0.329 | 113 / 202 |
+| 48 | 36 / 4951 | 2013 / 5564 | 233 | 2253 / 34942 | 495 | 2061 (navegacao) | 0 | 3.786 / 0.507 | 113 / 200 |
+| 64 | 30 / 4086 | 2423 / 6054 | 190 | 3000 / 43920 | 511 | 4503 (status) | 0 | 4.645 / 0.803 | 112 / 204 |
+| 96 | 38 / 4456 | 2569 / 12798 | 495 | 3676 / 61470 | 767 | 5728 (navegacao) | 0 | 10.553 / 1.280 | 108 / 203 |
+| 128 | 30 / 4248 | 1756 / 11696 | 603 | 3312 / 48076 | 734 | 7356 (navegacao) | 0 | 13.029 / 1.172 | 107 / 202 |
 
-### Modo tempo real (ATR_TEMPO_REAL=1)
+### Modo tempo real (ATR_TEMPO_REAL=1, SCHED_FIFO) × modo normal
 
-Não executado nesta máquina: o usuário não tem permissão para SCHED_FIFO (`normal (ATR_TEMPO_REAL=0); ulimit -r = 0`; `chrt -f 1 true` falha com EPERM). O código está pronto: `ATR_TEMPO_REAL=1 ./logistica` como root, ou no Docker (o `compose.yaml` dá `cap_add: SYS_NICE`), e depois `testes/escalabilidade.sh rt`.
+Rodado no Docker (`rt (ATR_TEMPO_REAL=1); ulimit -r = 0`; uname `Linux e5ccfcedd2c8 6.18.58.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Tue Oct 27 00:24:11 UTC 2026 x86_64 GNU/Linux`), com o comando:
+
+    docker compose run --rm -T -v ./testes:/app/testes logistica testes/escalabilidade.sh rt
+
+C máx = pior tarefa periódica (µs); atraso = atraso máximo de liberação entre todas as tarefas (µs); lat. = latência máxima da falha (ms).
+
+| N | C_nav máx normal / rt | C_status máx normal / rt | C_org máx normal / rt | atraso máx normal / rt | perdas normal / rt | lat. máx normal / rt | entregas/min normal / rt |
+|---|---|---|---|---|---|---|---|
+| 1 | 3407 / 2572 | 2866 / 3584 | 20388 / 19206 | 850 / 1028 | 0 / 0 | 198 / 199 | 3.0 / 3.0 |
+| 2 | 4584 / 4402 | 4167 / 5036 | 43801 / 22310 | 21290 / 799 | 0 / 0 | 192 / 194 | 3.0 / 3.0 |
+| 4 | 5534 / 3766 | 5019 / 5128 | 17382 / 27924 | 1420 / 1143 | 0 / 0 | 191 / 199 | 1.5 / 1.5 |
+| 8 | 5938 / 4809 | 4961 / 4840 | 56120 / 35865 | 1050 / 1157 | 0 / 0 | 197 / 201 | 6.0 / 6.0 |
+| 12 | 4819 / 5431 | 6102 / 5385 | 32035 / 25010 | 1126 / 1209 | 0 / 0 | 199 / 202 | 10.5 / 10.5 |
+| 16 | 6043 / 6032 | 5893 / 5164 | 34344 / 22586 | 1233 / 1290 | 0 / 0 | 194 / 199 | 9.0 / 9.0 |
+| 24 | 6165 / 4601 | 5558 / 6426 | 45842 / 44620 | 1615 / 1461 | 0 / 0 | 200 / 203 | 12.0 / 13.5 |
+| 32 | 3796 / 4099 | 5527 / 5919 | 38183 / 47677 | 3156 / 1375 | 0 / 0 | 202 / 202 | 13.5 / 13.5 |
+| 48 | 4951 / 3284 | 5564 / 6432 | 34942 / 66033 | 2061 / 5650 | 0 / 0 | 200 / 202 | 13.5 / 15.0 |
+| 64 | 4086 / 5153 | 6054 / 6666 | 43920 / 40882 | 4503 / 1131 | 0 / 0 | 204 / 201 | 15.0 / 15.0 |
+| 96 | 4456 / 3586 | 12798 / 7354 | 61470 / 52352 | 5728 / 4946 | 0 / 0 | 203 / 174 | 15.0 / 15.0 |
+| 128 | 4248 / 3204 | 11696 / 9782 | 48076 / 34951 | 7356 / 4349 | 0 / 0 | 202 / 179 | 15.0 / 15.0 |
+
+**Comparação.** Perdas de prazo: 0 no modo normal e 0 no rt, em todos os N. O pior atraso de liberação caiu de 21.3 ms (normal) para 5.6 ms (rt), e foi menor no rt em 7 de 12 valores de N: com SCHED_FIFO uma tarefa pronta não espera atrás de processos comuns da máquina (navegador, IDE). O C máximo da Status com N grande também caiu (N = 128: 11696 → 9782 µs). A latência da falha e a vazão praticamente não mudam: a latência é dominada pela FASE do ciclo de 200 ms da Status (0 a 200 ms), e a vazão pelas 4 baias, não pela CPU. Ou seja: com esta carga (U médio ≈ 1 de 12 núcleos) o modo normal já é suficiente; o tempo real diminui a cauda dos atrasos, que é o que importaria com a máquina mais carregada. Os C máximos continuam com picos isolados nos dois modos: o WSL2 é uma máquina virtual e o Windows pode tirar a CPU do Linux inteiro, coisa que nenhuma prioridade dentro do Linux impede.
 
 ![Utilização](imagens/escalabilidade_utilizacao.png)
 
@@ -49,16 +135,18 @@ Para n tarefas periódicas independentes com Rate Monotonic num processador, U �
 
 | N | n tarefas | U(N) | limite L&L | passa no L&L (1 núcleo)? |
 |---|---|---|---|---|
-| 1 | 5 | 0.066 | 0.743 | sim |
-| 2 | 7 | 0.112 | 0.729 | sim |
-| 4 | 11 | 0.446 | 0.715 | sim |
-| 8 | 19 | 0.575 | 0.706 | sim |
-| 12 | 27 | 1.028 | 0.702 | não (teste inconclusivo) |
-| 16 | 35 | 1.446 | 0.700 | não (teste inconclusivo) |
-| 24 | 51 | 2.075 | 0.698 | não (teste inconclusivo) |
-| 32 | 67 | 2.928 | 0.697 | não (teste inconclusivo) |
-| 48 | 99 | 4.503 | 0.696 | não (teste inconclusivo) |
-| 64 | 131 | 5.089 | 0.695 | não (teste inconclusivo) |
+| 1 | 5 | 0.098 | 0.743 | sim |
+| 2 | 7 | 0.223 | 0.729 | sim |
+| 4 | 11 | 0.365 | 0.715 | sim |
+| 8 | 19 | 0.792 | 0.706 | não (teste inconclusivo) |
+| 12 | 27 | 1.014 | 0.702 | não (teste inconclusivo) |
+| 16 | 35 | 1.512 | 0.700 | não (teste inconclusivo) |
+| 24 | 51 | 2.242 | 0.698 | não (teste inconclusivo) |
+| 32 | 67 | 2.180 | 0.697 | não (teste inconclusivo) |
+| 48 | 99 | 3.786 | 0.696 | não (teste inconclusivo) |
+| 64 | 131 | 4.645 | 0.695 | não (teste inconclusivo) |
+| 96 | 195 | 10.553 | 0.694 | não (teste inconclusivo) |
+| 128 | 259 | 13.029 | 0.694 | não (teste inconclusivo) |
 
 Este computador tem 12 núcleos e o Linux distribui as threads entre eles (escalonamento global). O L&L é de 1 núcleo, então ele é PESSIMISTA aqui: mesmo que U(N) passe do limite de 1 núcleo, a carga cabe com folga em 12 (U ≪ 12). Ele serve como referência de "se tudo rodasse num núcleo só".
 
@@ -72,31 +160,32 @@ iterando a partir de R⁰ = Σ C até R parar de mudar; a tarefa é escalonável
 
 ### Passo a passo: Organizador com N = 8 (tudo num núcleo só)
 
-C (ms): Navegação = 3.592 (×8), Simulador = 0.172, Status = 5.936 (×8), Ponte = 0.439, Organizador = 23.020.
+C (ms): Navegação = 5.938 (×8), Simulador = 0.347, Status = 4.961 (×8), Ponte = 0.517, Organizador = 56.120.
 
-R^(k+1) = 23.020 + ⌈R^k/100⌉·(8·3.592 + 0.172) + ⌈R^k/200⌉·(8·5.936 + 0.439),  R^0 = Σ C
+R^(k+1) = 56.120 + ⌈R^k/100⌉·(8·5.938 + 0.347) + ⌈R^k/200⌉·(8·4.961 + 0.517),  R^0 = Σ C
 
 | iteração k | R^k (ms) |
 |---|---|
-| 0 | 99.855 |
+| 0 | 144.175 |
+| 1 | 192.023 |
 
-R^0 = 99.855 ms já é menor que o menor período (100 ms): nenhuma tarefa de maior prioridade é liberada de novo antes de o Organizador terminar, então R^1 = R^0 (convergiu). R = 99.855 ms ≤ 500 ms → **escalonável**.
+Convergiu: R = 192.023 ms ≤ 500 ms → **escalonável**.
 
 ### Passo a passo: Organizador com N = 12 (tudo num núcleo só)
 
-C (ms): Navegação = 5.277 (×12), Simulador = 0.395, Status = 5.809 (×12), Ponte = 0.854, Organizador = 18.934.
+C (ms): Navegação = 4.819 (×12), Simulador = 0.192, Status = 6.101 (×12), Ponte = 0.732, Organizador = 32.035.
 
-R^(k+1) = 18.934 + ⌈R^k/100⌉·(12·5.277 + 0.395) + ⌈R^k/200⌉·(12·5.809 + 0.854),  R^0 = Σ C
+R^(k+1) = 32.035 + ⌈R^k/100⌉·(12·4.819 + 0.192) + ⌈R^k/200⌉·(12·6.101 + 0.732),  R^0 = Σ C
 
 | iteração k | R^k (ms) |
 |---|---|
-| 0 | 153.218 |
-| 1 | 216.935 |
-| 2 | 351.218 |
-| 3 | 414.935 |
-| 4 | 549.219 |
+| 0 | 164.002 |
+| 1 | 222.019 |
+| 2 | 353.986 |
+| 3 | 412.002 |
+| 4 | 543.969 |
 
-R passou de T = 500 ms (549.219 ms) → **NÃO escalonável** em um núcleo: a cada 100 ms as Navegações e o Simulador voltam, a cada 200 ms as Status e a Ponte, e o Organizador não termina a tempo.
+R passou de T = 500 ms (543.969 ms) → **NÃO escalonável** em um núcleo: a cada 100 ms as Navegações e o Simulador voltam, a cada 200 ms as Status e a Ponte, e o Organizador não termina a tempo.
 
 ### RTA para todos os N (1 núcleo, C máximo)
 
@@ -104,22 +193,20 @@ R de cada grupo = R da ÚLTIMA tarefa daquele período na ordem de prioridade (S
 
 | N | R (T = 100 ms) | R (T = 200 ms) | R_organizador (ms) | escalonável em 1 núcleo? |
 |---|---|---|---|---|
-| 1 | 3.50 | 6.40 | 14.57 | sim |
-| 2 | 4.60 | 11.99 | 26.66 | sim |
-| 4 | 28.08 | 52.91 | 73.25 | sim |
-| 8 | 28.91 | 76.83 | 99.85 | sim |
-| 12 | 63.72 | 198.00 | 549.22 | não |
-| 16 | 88.33 | 280.20 | 774.91 | não |
-| 24 | 223.93 | 692.32 | 836.25 | não |
-| 32 | 365.66 | 1142.62 | 1566.79 | não |
-| 48 | 828.15 | 3250.01 | 3298.34 | não |
-| 64 | 801.83 | 3998.42 | 4044.97 | não |
+| 1 | 4.03 | 7.40 | 27.79 | sim |
+| 2 | 9.26 | 17.87 | 61.67 | sim |
+| 4 | 22.59 | 43.36 | 60.74 | sim |
+| 8 | 47.85 | 88.06 | 192.02 | sim |
+| 12 | 58.02 | 189.98 | 543.97 | não |
+| 16 | 96.89 | 288.60 | 514.66 | não |
+| 24 | 296.09 | 711.65 | 906.08 | não |
+| 32 | 243.15 | 719.30 | 879.72 | não |
+| 48 | 713.12 | 2228.88 | 2264.81 | não |
+| 64 | 784.78 | 3382.35 | 3427.80 | não |
+| 96 | 2139.33 | 18338.94 | 18834.81 | não |
+| 128 | 3263.30 | 27900.38 | 27955.80 | não |
 
-Se TUDO rodasse num núcleo só, com os C máximos medidos, o maior N garantido pela RTA seria **N = 8**. Com 12 núcleos a RTA clássica não se aplica diretamente (escalonamento global), e o que vale é a medição: zero perdas até N = 64. A RTA de 1 núcleo é muito pessimista porque soma os PICOS de C (raros e de causas externas) de todas as tarefas como se acontecessem juntos.
-
-## Extrapolação (até onde iria o processador)
-
-Entre N = 48 e N = 64, cada robô a mais soma ≈ 0.0366 de utilização com C máximo (≈ 0.0145 com C médio). Extrapolando linearmente, U = 12 (todos os núcleos cheios) seria atingido em N ≈ 253 pelo pior caso e N ≈ 832 pela carga média. É uma estimativa grosseira: o custo do Organizador e do A* cresce mais que linearmente com a ocupação do mapa, e o mapa de 60×30 (com obstáculos, passagens de capacidade 1 a 4) fica congestionado antes disso. Na prática o limite de verdade passa a ser o ESPAÇO (robôs esperando célula/passagem), não a CPU.
+Se TUDO rodasse num núcleo só, com os C máximos medidos, o maior N garantido pela RTA seria **N = 8**. Com 12 núcleos a RTA clássica não se aplica diretamente (escalonamento global), e o que vale é a medição: zero perdas até N = 128. A RTA de 1 núcleo é muito pessimista porque soma os PICOS de C (raros e de causas externas) de todas as tarefas como se acontecessem juntos.
 
 ## Limitações
 
@@ -129,11 +216,13 @@ Entre N = 48 e N = 64, cada robô a mais soma ≈ 0.0366 de utilização com C m
 - **C máximo observado ≠ WCET.** 60 s por N é uma amostra; um caminho de código raro (A* num mapa congestionado) pode demorar mais. Por isso usamos margem: o critério é zero perdas, e a RTA usa o máximo, não a média.
 - **Latência da falha**: 10 amostras por N, com resolução de 1 ms (o Console consulta o buffer a cada 1 ms). Ela é dominada pela FASE do ciclo da Status (0 a 200 ms), não pela carga.
 - **RTA de 1 núcleo**: o sistema roda em vários núcleos com escalonamento global, para o qual a RTA clássica não vale diretamente; usá-la como se fosse 1 núcleo é conservador (se passa em 1, passa em mais). Também ignora bloqueio por mutex (seções críticas curtas, de cópia) e o custo de troca de contexto.
-- O benchmark roda sem a Tela de Operação (a ponte MQTT publica para o broker local, mas ninguém desenha 64 robôs).
+- O benchmark roda sem a Tela de Operação (a ponte MQTT publica para o broker local, mas ninguém desenha 128 robôs).
+- **Vazão**: uma rodada de 60 s por N (40 s de regime) e uma semente (42, um mapa); entregas/min tem resolução de 1,5 entrega/min (1 entrega em 40 s).
+- **Modo rt no Docker**: o container roda como root com `SYS_NICE` (por isso o SCHED_FIFO funciona com `ulimit -r = 0`) e usa o fuso UTC nos logs (só os tempos relativos entram na vazão, então isso não muda nada).
 
 ## Hardware e ambiente
 
-- data: `2026-11-14 18:27:20`
+- data: `2026-11-14 20:39:52`
 - nproc: `12`
 - cpu: `13th Gen Intel(R) Core(TM) i5-13420H`
 - uname: `Linux PabloReis 6.18.58.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Tue Oct 27 00:24:11 UTC 2026 x86_64 GNU/Linux`
@@ -141,5 +230,10 @@ Entre N = 48 e N = 64, cada robô a mais soma ≈ 0.0366 de utilização com C m
 
 ## Como reproduzir
 
-    testes/escalabilidade.sh           # ~12 min por modo; grava testes/saidas/escalabilidade*
+    testes/escalabilidade.sh normal    # ~16 min; grava testes/saidas/escalabilidade*
+    docker compose build               # modo rt: dentro do container (SYS_NICE)
+    ATR_PORTA_MQTT=1884 docker compose run --rm -T -v ./testes:/app/testes \
+        logistica testes/escalabilidade.sh rt
     interface/.venv/bin/python testes/analisar_escalabilidade.py
+
+`ATR_PORTA_MQTT=1884` só é preciso se o host já tem um mosquitto na porta 1883 (o do WSL, que o modo normal usa). O modo rt acrescenta as linhas `rt` ao mesmo CSV.

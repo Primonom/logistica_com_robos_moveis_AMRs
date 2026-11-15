@@ -35,22 +35,22 @@ Mapa (semente 2):
 .............####........o..####...........####.o...o.......
 .............####...........####.....E.....####.............
 .............####.......o...####...........####.............
-Gestor: robo 0 criado (pid 16447) em (8,15)
-Robo 0 vivo (pid 16447)
+Gestor: robo 0 criado (pid 27039) em (8,15)
+Robo 0 vivo (pid 27039)
 Console: robo 0 em DISPONIVEL
 Organizador: 1 robo(s) novo(s) na frota
 Organizador: caixa 1 (tam 1, baia 2 -> zona D): robos 0 indo para a baia
 Organizador: caixa 1: equipe completa na baia, ACOPLAR
 Console: robo 0 em OPERANDO_CARGA
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   16447   OPERANDO_CARGA     ( 3,11)  ( 3,11)   99%     9  auto  1
+0   27039   OPERANDO_CARGA     ( 3,11)  ( 3,11)   99%     9  auto  1
 caixa 1   tam 1  baia 2 -> zona D  em andamento
 caixas entregues: 0
 Organizador: caixa 1: erguida por todos, IR_ZONA D (lider 0)
 Organizador: caixa 1 entregue na zona D (robos 0)
 Console: robo 0 em DISPONIVEL
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   16447   DISPONIVEL         (56,25)  (56,25)   82%    94  auto  -1
+0   27039   DISPONIVEL         (56,25)  (56,25)   82%    94  auto  -1
 caixas entregues: 1
 Encerrando...
 Fim.

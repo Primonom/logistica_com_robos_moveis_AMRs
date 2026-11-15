@@ -1,6 +1,6 @@
 # Cenário 10: 6 robôs e 6 caixas de tamanho 1 ao mesmo tempo (semente 42).
-#  - os 6 "novo" pedem a posição padrão (8,15): o Gestor coloca cada robô
-#    na célula LIVRE mais próxima (BFS na grade de ocupação);
+#  - os 6 "novo" pedem a posição padrão (8,15), que é ESTACIONAMENTO
+#    (aceita vários robôs): os 6 nascem nela;
 #  - 6 caixas de uma vez, nas 4 baias e para as 4 zonas: 4 entregas
 #    andam em paralelo (uma por baia) e depois as outras 2, com robôs
 #    se cruzando nos corredores e nas passagens.

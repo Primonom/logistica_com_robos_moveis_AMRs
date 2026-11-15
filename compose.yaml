@@ -1,8 +1,10 @@
 services:
   broker:
     image: eclipse-mosquitto:2
+    # Porta no host: 1883, ou ATR_PORTA_MQTT se o host já tem um mosquitto
+    # nela (ex.: o do WSL). Os containers usam sempre broker:1883.
     ports:
-      - "127.0.0.1:1883:1883"
+      - "127.0.0.1:${ATR_PORTA_MQTT:-1883}:1883"
     volumes:
       - ./docker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
     restart: unless-stopped

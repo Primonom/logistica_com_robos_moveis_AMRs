@@ -25,15 +25,21 @@
 #include "mapa.h"
 
 /* ---------- Limites ---------- */
-/* MAX_ROBOS = 64 para o teste de escalabilidade (testes/escalabilidade.sh).
- * O que depende dele: o tamanho de /atr_shm, o JSON da ponte MQTT
- * (TAMANHO_JSON), a fila de pedidos do Gestor (MAX_PEDIDOS = MAX_ROBOS) e
- * as filas POSIX: 64 filas /atr_robo_* + /atr_coletor = 65 filas, abaixo
- * do limite do Linux (/proc/sys/fs/mqueue/queues_max = 256) e com ~1 KB
- * cada, bem abaixo do RLIMIT_MSGQUEUE de 800 KB por usuário (ver
- * docs/ESCALABILIDADE.md). */
-#define MAX_ROBOS  64
-#define MAX_CAIXAS 128   /* o benchmark coloca 2 caixas por robô */
+/* MAX_ROBOS = 128 para o teste de escalabilidade (testes/escalabilidade.sh).
+ * O que depende dele (conferido para 128, ver docs/ESCALABILIDADE.md):
+ *   - o tamanho de /atr_shm (128 slots de ~0,4 KB; /atr_shm inteira
+ *     com o mapa, a grade e as caixas = ~100 KB, medido);
+ *   - o JSON da ponte MQTT (TAMANHO_JSON) e a resposta do "status"
+ *     (TAMANHO_RESPOSTA);
+ *   - a fila de pedidos do Gestor (MAX_PEDIDOS = MAX_ROBOS);
+ *   - as filas POSIX: 128 filas /atr_robo_* + /atr_coletor = 129 filas,
+ *     abaixo do limite do Linux (/proc/sys/fs/mqueue/queues_max = 256).
+ *     Cada fila de robô custa ~1,1 KB do RLIMIT_MSGQUEUE (800 KB por
+ *     usuário): 128 x 1,1 KB + 2,5 KB (coletor) = ~145 KB.
+ *   - o limite real seguinte seria queues_max: com MAX_ROBOS > 255 o
+ *     Gestor não conseguiria criar a fila do robô (mq_open: EMFILE/ENOSPC). */
+#define MAX_ROBOS  128
+#define MAX_CAIXAS 256   /* o benchmark coloca 2 caixas por robô (no mínimo 64) */
 #define MAX_ROTA_STATUS 32    /* "cantos" da rota publicados no buffer de status */
 
 /* ---------- Períodos das tarefas periódicas (em milissegundos) ---------- */
@@ -181,6 +187,13 @@ typedef struct {
      * Navegação quando muda (como modo_automatico) e lido pelo simulador,
      * que confere se houve colisão (ver simulador.c). */
     int      grupo;
+    /* Célula da grade onde o robô está (a última que a Navegação
+     * confirmou). Escrita pela Navegação ao chegar numa célula (como o
+     * grupo) e lida pelos SEGUIDORES da equipe, que dão o passo para a
+     * célula do líder. POR QUE não usar e_posicao: o buffer de status é
+     * atualizado a cada 200 ms; com ele cada passo da equipe em bloco
+     * levaria até 300 ms a mais (ver "Equipe em bloco" em EXPLICACAO.md). */
+    int      celula_x, celula_y;
 
     /* Medição de tempo das duas tarefas periódicas deste robô. Cada uma
      * escreve a sua no fim do ciclo, com o mutex deste slot (o mesmo que
@@ -231,7 +244,7 @@ typedef struct {
 /* ---------- Anti-colisão descentralizada (ponto extra +2, ocupacao.c) ---------- */
 
 /* Grupo de uma equipe de transporte com mais de 1 robô = GRUPO_EQUIPE +
- * carga_id (os ids de robô vão de 0 a MAX_ROBOS - 1 = 63, então não se confundem). */
+ * carga_id (os ids de robô vão de 0 a MAX_ROBOS - 1 = 127, então não se confundem). */
 #define GRUPO_EQUIPE 1000
 
 /* Grade de ocupação: quem está (ou reservou) cada célula.
@@ -344,10 +357,9 @@ typedef struct {
     int x, y;       /* destino (quando fizer sentido) */
     int carga_id;
     int lider_id;
-    /* IR_ZONA: a equipe inteira (o líder usa para saber quando todos já
-     * saíram de uma passagem antes de liberá-la). */
+    /* IR_ZONA: tamanho da equipe (o líder só avança quando os n_membros
+     * robôs estão na célula dele, ver "equipe anda em bloco" em navegacao.c). */
     int n_membros;
-    int membros[TAMANHO_MAX_CAIXA];
 } MensagemRobo;
 
 /* Tipos de mensagem para o Coletor de Dados. */
@@ -404,7 +416,9 @@ void ponte_publicar(const char *topico, const char *texto); /* qualquer thread *
 void ponte_destruir(void);           /* main, DEPOIS de todas terminarem */
 
 /* ---------- ocupacao.c (anti-colisão; processo robo e Gestor) ---------- */
-bool estacionamento(int x, int y);   /* baia, zona ou estação: aceita vários robôs */
+bool estacionamento(int x, int y);   /* baia, zona, estação ou posição padrão: aceita vários robôs */
+bool estacionamento_ocioso(int x, int y); /* zona, estação ou posição padrão (não baia) */
+int  robos_do_grupo(int x, int y, int grupo); /* n da célula se o grupo é "grupo", senão 0 */
 bool reservar_celula(int x, int y, int grupo, int *grupo_ocupante);
 void liberar_celula(int x, int y);
 bool reservar_livre_perto(int *x, int *y, int grupo);  /* Gestor: BFS */

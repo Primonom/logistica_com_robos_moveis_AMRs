@@ -1,0 +1,243 @@
+# data: 2026-11-15 00:04:29
+# nproc: 12
+# cpu: 13th Gen Intel(R) Core(TM) i5-13420H
+# uname: Linux e5ccfcedd2c8 6.18.58.1-microsoft-standard-WSL2 #1 SMP PREEMPT_DYNAMIC Tue Oct 27 00:24:11 UTC 2026 x86_64 GNU/Linux
+# modo: rt (ATR_TEMPO_REAL=1); ulimit -r = 0
+# queues_max: 256
+# msg_max: 10
+# rlimit_msgqueue: 819200
+# max_processos: unlimited
+# memoria_mb: 7794
+# rt_runtime_us: 950000
+Mapa gerado com semente 42
+  P1: parede 1, y = 12, x 12..17, capacidade 4
+  P2: parede 1, y = 20, x 12..17, capacidade 2
+  P3: parede 2, y = 13, x 27..32, capacidade 1
+  P4: parede 3, y = 24, x 42..47, capacidade 3
+Gestor: robo 0 criado (pid 469) em (8,15)
+Robo 0 vivo (pid 469)
+Ponte MQTT: conectada ao broker broker:1883
+Robo 1 vivo (pid 471)
+Gestor: robo 1 criado (pid 471) em (8,15)
+Organizador: 2 robo(s) novo(s) na frota
+Robo 2 vivo (pid 476)
+Gestor: robo 3 criadRobo 3 vivo (pid 477)
+Robo 4 vivo (pid 480)
+Gestor: robo 5 criado (pid 483) em (8,15)
+Robo 5 vivo (pid 483)
+Gestor: robo 6 criado (pid 486) em (8,15)
+Robo 6 vivo (pid 486)
+Gestor: robo 7 criado (pid 489) em (8,15)
+Robo 7 vivo (pid 489)
+Gestor: robo 8 criado (pid 492) em (8,15)
+Robo 8 vivo (pid 492)
+Gestor: robo 9 criado (pid 495) em (8,15)
+Robo 9 vivo (pid 495)
+Gestor: robo 10 criado (pid 498) em (8,15)
+Robo 10 vivo (pid 498)
+Gestor: robo 11 criado (pid 501) em (8,15)
+Robo 11 vivo (pid 501)
+Gestor: robo 12 criado (pid 504) em (8,15)
+Robo 12 vivo (pid 504)
+Gestor: robo 13 criado (pid 507) em (8,15)
+Robo 13 vivo (pid 507)
+Gestor: robo 14 criado (pid 510) em (8,15)
+Robo 14 vivo (pid 510)
+Gestor: robo 15 criado (pid 513) em (8,15)
+Robo 15 vivo (pid 513)
+Gestor: robo 16 criado (pid 516) em (8,15)
+Robo 16 vivo (pid 516)
+Robo 17 vivo (pid 519)
+Gestor: robo 18 criado (pid 522) em (8,15)
+Robo 18 vivo (pid 522)
+Gestor: robo 19 criado (pid 525) em (8,15)
+Robo 19 vivo (pid 525)
+Gestor: robo 20 criado (pid 528) em (8,15)
+Gestor: robo 21 criado (pid 531) em (8,15)
+Robo 20 vivo (pid 528)
+Robo 21 vivo (pid 531)
+Gestor: robo 22 criado (pid 532) em (8,15)
+Robo 22 vivo (pid 532)
+Gestor: robo 23 criado (pid 537) em (8,15)
+Robo 23 vivo (pid 537)
+Gestor: robo 24 criado (pid 540) em (8,15)
+Robo 24 vivo (pid 540)
+Gestor: robo 25 criado (pid 543) em (8,15)
+Robo 25 vivo (pid 543)
+Gestor: robo 26 criado (pid 546) em (8,15)
+Robo 26 vivo (pid 546)
+Robo 27 vivo (pid 549)
+Gestor: robo 28 criado (pid 552) em (8,15)
+Robo 28 vivo (pid 552)
+Gestor: robo 29 criado (pid 555) em (8,15)
+Robo 29 vivo (pid 555)
+Gestor: robo 30 criado (pid 558) em (8,15)
+Robo 30 vivo (pid 558)
+Gestor: robo 31 criado (pid 561) em (8,15)
+Robo 31 vivo (pid 561)
+Organizador: 30 robo(s) novo(s) na frota
+Organizador: caixa 1 (tam 1, baia 1 -> zona A): robos 0 indo para a baia
+Organizador: caixa 2 (tam 2, baia 2 -> zona A): robos 1 2 indo para a baia
+Organizador: caixa 3 (tam 3, baia 3 -> zona A): robos 3 4 5 indo para a baia
+Organizador: caixa 4 (tam 4, baia 4 -> zona A): robos 6 7 8 9 indo para a baia
+Organizador: caixa 3: equipe completa na baia, ACOPLAR
+Organizador: caixa 1: equipe completa na baia, ACOPLAR
+Organizador: caixa 2: equipe completa na baia, ACOPLAR
+Organizador: caixa 3: erguida por todos, IR_ZONA A (lider 3)
+Organizador: caixa 1: erguida por todos, IR_ZONA A (lider 0)
+Organizador: caixa 2: erguida por todos, IR_ZONA A (lider 1)
+Organizador: caixa 4: equipe completa na baia, ACOPLAR
+Organizador: caixa 4: erguida por todos, IR_ZONA A (lider 6)
+Organizador: caixa 1 entregue na zona A (robos 0)
+Organizador: caixa 5 (tam 1, baia 1 -> zona B): robos 10 indo para a baia
+Organizador: caixa 5: equipe completa na baia, ACOPLAR
+Organizador: caixa 5: erguida por todos, IR_ZONA B (lider 10)
+Organizador: caixa 2 entregue na zona A (robos 1 2)
+Organizador: caixa 6 (tam 2, baia 2 -> zona B): robos 11 12 indo para a baia
+Organizador: caixa 6: equipe completa na baia, ACOPLAR
+Organizador: caixa 3 entregue na zona A (robos 3 4 5)
+Organizador: caixa 7 (tam 3, baia 3 -> zona B): robos 13 14 15 indo para a baia
+Organizador: caixa 6: erguida por todos, IR_ZONA B (lider 11)
+Organizador: caixa 7: equipe completa na baia, ACOPLAR
+Organizador: caixa 4 entregue na zona A (robos 6 7 8 9)
+Organizador: caixa 8 (tam 4, baia 4 -> zona B): robos 16 17 18 19 indo para a baia
+Organizador: caixa 5 entregue na zona B (robos 10)
+Organizador: caixa 7: erguida por todos, IR_ZONA B (lider 13)
+Organizador: caixa 9 (tam 1, baia 1 -> zona C): robos 20 indo para a baia
+Organizador: caixa 9: equipe completa na baia, ACOPLAR
+Organizador: caixa 9: erguida por todos, IR_ZONA C (lider 20)
+Organizador: caixa 8: equipe completa na baia, ACOPLAR
+Organizador: caixa 8: erguida por todos, IR_ZONA B (lider 16)
+Organizador: caixa 9 entregue na zona C (robos 20)
+Organizador: caixa 13 (tam 1, baia 1 -> zona D): robos 21 indo para a baia
+Organizador: caixa 13: equipe completa na baia, ACOPLAR
+Organizador: caixa 6 entregue na zona B (robos 11 12)
+Organizador: caixa 10 (tam 2, baia 2 -> zona C): robos 22 23 indo para a baia
+Organizador: caixa 13: erguida por todos, IR_ZONA D (lider 21)
+Organizador: caixa 10: equipe completa na baia, ACOPLAR
+Organizador: caixa 10: erguida por todos, IR_ZONA C (lider 22)
+Organizador: caixa 7 entregue na zona B (robos 13 14 15)
+Organizador: caixa 11 (tam 3, baia 3 -> zona C): robos 24 25 26 indo para a baia
+Organizador: caixa 11: equipe completa na baia, ACOPLAR
+Organizador: caixa 11: erguida por todos, IR_ZONA C (lider 24)
+Organizador: caixa 8 entregue na zona B (robos 16 17 18 19)
+Organizador: caixa 12 (tam 4, baia 4 -> zona C): robos 27 28 29 30 indo para a baia
+Organizador: caixa 13 entregue na zona D (robos 21)
+Organizador: caixa 17 (tam 1, baia 1 -> zona A): robos 31 indo para a baia
+Organizador: caixa 12: equipe completa na baia, ACOPLAR
+Organizador: caixa 12: erguida por todos, IR_ZONA C (lider 27)
+Organizador: caixa 17: equipe completa na baia, ACOPLAR
+Organizador: caixa 17: erguida por todos, IR_ZONA A (lider 31)
+Organizador: caixa 10 entregue na zona C (robos 22 23)
+Organizador: caixa 14 (tam 2, baia 2 -> zona D): robos 21 20 indo para a baia
+# tempos (T em ms; C e atraso em us; U = Cmax/T)
+tarefa          T   ciclos      Cmed      Cmax  atraso_max  perdas        U
+navegacao     100    19200      39.6    4099.0      1374.8       0   0.0410
+status        200     9600    2346.6    5918.7      1281.9       0   0.0296
+simulador     100      600      55.9     219.6       354.6       0   0.0022
+organizador   500      120    2742.6   47677.0       313.2       0   0.0954
+ponte_mqtt    200      300     220.4     563.2       268.8       0   0.0028
+robos ativos: 32 (navegacao e status: pior caso entre eles)
+id  pid     estado             pos      sp       bat   dist  modo  carga
+0   469     DISPONIVEL         (56, 4)  (56, 4)   78%   111  auto  -1
+1   471     DISPONIVEL         (56, 4)  (56, 4)   81%    97  auto  -1
+2   476     DISPONIVEL         (56, 4)  (56, 4)   81%    97  auto  -1
+3   477     DISPONIVEL         (56, 4)  (56, 4)   80%   101  auto  -1
+4   480     DISPONIVEL         (56, 4)  (56, 4)   80%   101  auto  -1
+5   483     DISPONIVEL         (56, 4)  (56, 4)   80%   101  auto  -1
+6   486     DISPONIVEL         (56, 4)  (56, 4)   78%   111  auto  -1
+7   489     DISPONIVEL         (56, 4)  (56, 4)   78%   111  auto  -1
+8   492     DISPONIVEL         (56, 4)  (56, 4)   78%   111  auto  -1
+9   495     DISPONIVEL         (56, 4)  (56, 4)   78%   111  auto  -1
+10  498     DISPONIVEL         (56,11)  (56,11)   80%   104  auto  -1
+11  501     DISPONIVEL         (56,11)  (56,11)   82%    90  auto  -1
+12  504     DISPONIVEL         (56,11)  (56,11)   82%    90  auto  -1
+13  507     DISPONIVEL         (56,11)  (56,11)   81%    96  auto  -1
+14  510     DISPONIVEL         (56,11)  (56,11)   81%    96  auto  -1
+15  513     DISPONIVEL         (56,11)  (56,11)   81%    96  auto  -1
+16  516     DISPONIVEL         (56,11)  (56,11)   80%   104  auto  -1
+17  519     DISPONIVEL         (56,11)  (56,11)   79%   106  auto  -1
+18  522     DISPONIVEL         (56,11)  (56,11)   79%   106  auto  -1
+19  525     DISPONIVEL         (56,11)  (56,11)   80%   104  auto  -1
+20  528     DESLOCANDO         (42,24)  (42,24)   77%   117  auto  14
+21  531     DESLOCANDO         (43,24)  (43,24)   79%   106  auto  14
+22  532     DISPONIVEL         (56,18)  (56,18)   84%    83  auto  -1
+23  537     DISPONIVEL         (56,18)  (56,18)   84%    83  auto  -1
+24  540     OPERANDO_CARGA     (54,18)  (54,18)   83%    87  auto  11
+25  543     OPERANDO_CARGA     (53,18)  (53,18)   83%    86  auto  11
+26  546     OPERANDO_CARGA     (53,18)  (53,18)   83%    86  auto  11
+27  549     OPERANDO_CARGA     (42,23)  (42,23)   85%    76  auto  12
+28  552     OPERANDO_CARGA     (42,23)  (42,23)   85%    76  auto  12
+29  555     OPERANDO_CARGA     (42,23)  (42,23)   85%    76  auto  12
+30  558     OPERANDO_CARGA     (42,23)  (42,23)   85%    76  auto  12
+31  561     OPERANDO_CARGA     (51,20)  (51,20)   82%    92  auto  17
+caixa 11  tam 3  baia 3 -> zona C  em andamento
+caixa 12  tam 4  baia 4 -> zona C  em andamento
+caixa 14  tam 2  baia 2 -> zona D  em andamento
+caixa 15  tam 3  baia 3 -> zona D  esperando
+caixa 16  tam 4  baia 4 -> zona D  esperando
+caixa 17  tam 1  baia 1 -> zona A  em andamento
+caixa 18  tam 2  baia 2 -> zona A  esperando
+caixa 19  tam 3  baia 3 -> zona A  esperando
+caixa 20  tam 4  baia 4 -> zona A  esperando
+caixa 21  tam 1  baia 1 -> zona B  esperando
+caixa 22  tam 2  baia 2 -> zona B  esperando
+caixa 23  tam 3  baia 3 -> zona B  esperando
+caixa 24  tam 4  baia 4 -> zona B  esperando
+caixa 25  tam 1  baia 1 -> zona C  esperando
+caixa 26  tam 2  baia 2 -> zona C  esperando
+caixa 27  tam 3  baia 3 -> zona C  esperando
+caixa 28  tam 4  baia 4 -> zona C  esperando
+caixa 29  tam 1  baia 1 -> zona D  esperando
+caixa 30  tam 2  baia 2 -> zona D  esperando
+caixa 31  tam 3  baia 3 -> zona D  esperando
+caixa 32  tam 4  baia 4 -> zona D  esperando
+caixa 33  tam 1  baia 1 -> zona A  esperando
+caixa 34  tam 2  baia 2 -> zona A  esperando
+caixa 35  tam 3  baia 3 -> zona A  esperando
+caixa 36  tam 4  baia 4 -> zona A  esperando
+caixa 37  tam 1  baia 1 -> zona B  esperando
+caixa 38  tam 2  baia 2 -> zona B  esperando
+caixa 39  tam 3  baia 3 -> zona B  esperando
+caixa 40  tam 4  baia 4 -> zona B  esperando
+caixa 41  tam 1  baia 1 -> zona C  esperando
+caixa 42  tam 2  baia 2 -> zona C  esperando
+caixa 43  tam 3  baia 3 -> zona C  esperando
+caixa 44  tam 4  baia 4 -> zona C  esperando
+caixa 45  tam 1  baia 1 -> zona D  esperando
+caixa 46  tam 2  baia 2 -> zona D  esperando
+caixa 47  tam 3  baia 3 -> zona D  esperando
+caixa 48  tam 4  baia 4 -> zona D  esperando
+caixa 49  tam 1  baia 1 -> zona A  esperando
+caixa 50  tam 2  baia 2 -> zona A  esperando
+caixa 51  tam 3  baia 3 -> zona A  esperando
+caixa 52  tam 4  baia 4 -> zona A  esperando
+caixa 53  tam 1  baia 1 -> zona B  esperando
+caixa 54  tam 2  baia 2 -> zona B  esperando
+caixa 55  tam 3  baia 3 -> zona B  esperando
+caixa 56  tam 4  baia 4 -> zona B  esperando
+caixa 57  tam 1  baia 1 -> zona C  esperando
+caixa 58  tam 2  baia 2 -> zona C  esperando
+caixa 59  tam 3  baia 3 -> zona C  esperando
+caixa 60  tam 4  baia 4 -> zona C  esperando
+caixa 61  tam 1  baia 1 -> zona D  esperando
+caixa 62  tam 2  baia 2 -> zona D  esperando
+caixa 63  tam 3  baia 3 -> zona D  esperando
+caixa 64  tam 4  baia 4 -> zona D  esperando
+caixas entregues: 11
+latencia_falha robo 0: 182.5 ms
+Organizador: caixa 11 entregue na zona C (robos 24 25 26)
+Organizador: caixa 15 (tam 3, baia 3 -> zona D): robos 22 23 10 indo para a baia
+latencia_falha robo 1: 102.0 ms
+latencia_falha robo 2: 79.5 ms
+latencia_falha robo 3: 57.7 ms
+latencia_falha robo 4: 42.2 ms
+latencia_falha robo 5: 22.7 ms
+Organizador: caixa 17 entregue na zona A (robos 31)
+Organizador: caixa 21 (tam 1, baia 1 -> zona B): robos 24 indo para a baia
+latencia_falha robo 6: 201.8 ms
+latencia_falha robo 7: 179.9 ms
+latencia_falha robo 8: 162.3 ms
+latencia_falha robo 9: 138.7 ms
+Encerrando...
+Fim.

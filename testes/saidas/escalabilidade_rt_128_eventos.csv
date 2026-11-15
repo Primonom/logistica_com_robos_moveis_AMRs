@@ -1,0 +1,19 @@
+2026-11-15 00:09:20.473;-1;sistema iniciado
+2026-11-15 00:09:25.489;-1;caixa 1 (tam 1, baia 1 -> zona A): robos 0 indo para a baia
+2026-11-15 00:09:25.496;-1;caixa 2 (tam 2, baia 2 -> zona A): robos 1 2 indo para a baia
+2026-11-15 00:09:25.503;-1;caixa 3 (tam 3, baia 3 -> zona A): robos 3 4 5 indo para a baia
+2026-11-15 00:09:25.517;-1;caixa 4 (tam 4, baia 4 -> zona A): robos 6 7 8 9 indo para a baia
+2026-11-15 00:09:37.991;-1;caixa 5 (tam 1, baia 1 -> zona B): robos 10 indo para a baia
+2026-11-15 00:09:45.987;-1;caixa 6 (tam 2, baia 2 -> zona B): robos 11 12 indo para a baia
+2026-11-15 00:09:47.491;-1;caixa 7 (tam 3, baia 3 -> zona B): robos 13 14 15 indo para a baia
+2026-11-15 00:09:49.010;-1;caixa 8 (tam 4, baia 4 -> zona B): robos 16 17 18 19 indo para a baia
+2026-11-15 00:09:49.503;-1;caixa 9 (tam 1, baia 1 -> zona C): robos 20 indo para a baia
+2026-11-15 00:10:02.498;-1;caixa 13 (tam 1, baia 1 -> zona D): robos 21 indo para a baia
+2026-11-15 00:10:04.502;-1;caixa 10 (tam 2, baia 2 -> zona C): robos 22 23 indo para a baia
+2026-11-15 00:10:08.514;-1;caixa 11 (tam 3, baia 3 -> zona C): robos 24 25 26 indo para a baia
+2026-11-15 00:10:11.515;-1;caixa 12 (tam 4, baia 4 -> zona C): robos 27 28 29 30 indo para a baia
+2026-11-15 00:10:13.016;-1;caixa 17 (tam 1, baia 1 -> zona A): robos 31 indo para a baia
+2026-11-15 00:10:21.503;-1;caixa 14 (tam 2, baia 2 -> zona D): robos 32 33 indo para a baia
+2026-11-15 00:10:26.511;-1;caixa 15 (tam 3, baia 3 -> zona D): robos 34 35 36 indo para a baia
+2026-11-15 00:10:27.607;-1;caixa 21 (tam 1, baia 1 -> zona B): robos 37 indo para a baia
+2026-11-15 00:10:31.037;-1;caixa 16 (tam 4, baia 4 -> zona D): robos 38 39 40 41 indo para a baia

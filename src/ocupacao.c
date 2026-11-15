@@ -14,11 +14,19 @@
  * 1) GRADE (mem->ocupacao): n[y][x] = quantos robôs estão ou reservaram a
  *    célula; grupo[y][x] = de que grupo eles são. Regra para ENTRAR: pode
  *    se n == 0 ou se o grupo da célula é o meu (a equipe anda junta).
- *    Células de ESTACIONAMENTO (baias, zonas, estações) aceitam vários
- *    robôs e não são marcadas: a equipe se reúne na baia, entrega na zona
- *    e vários robôs podem recarregar na mesma estação. Sem isso os robôs
- *    parados numa zona depois da entrega bloqueariam a próxima entrega
- *    para sempre.
+ *    Células de ESTACIONAMENTO (baias, zonas, estações e a posição padrão
+ *    do Gestor) aceitam vários robôs e não são marcadas: a equipe se
+ *    reúne na baia, entrega na zona, vários robôs podem recarregar na
+ *    mesma estação e os robôs novos nascem todos na posição padrão. Sem
+ *    isso os robôs parados numa zona depois da entrega bloqueariam a
+ *    próxima entrega para sempre.
+ *    Robô OCIOSO (DISPONIVEL, sem tarefa) fora de um estacionamento vai
+ *    sozinho para o mais próximo (estacionamento_ocioso: zona, estação ou
+ *    posição padrão; a baia NÃO, ela é só da equipe da caixa). Decisão da
+ *    Navegação de cada robô (navegacao.c). Assim um robô parado nunca
+ *    ocupa uma célula marcada: não fica no caminho de ninguém.
+ *    robos_do_grupo() diz quantos robôs de um grupo estão/reservaram uma
+ *    célula: o líder de uma equipe usa para andar em bloco.
  *
  * 2) MONITOR DAS PASSAGENS (mem->monitor[p], problema da "ponte de uma
  *    via"): num túnel de 1 célula de altura, dois robôs em sentidos
@@ -60,16 +68,40 @@
  * Grade de ocupação
  * ============================================================ */
 
-/* Baia, zona ou estação de recarga: aceita vários robôs (ver o topo). */
+/* Zona, estação de recarga ou posição padrão: onde um robô ocioso pode
+ * ficar parado (ver o topo). */
+bool estacionamento_ocioso(int x, int y)
+{
+    int i;
+
+    for (i = 0; i < N_ZONAS; i++)
+        if (x == ZONA_X[i] && y == ZONA_Y[i]) return true;
+    return na_estacao(x, y) || (x == POS_PADRAO_X && y == POS_PADRAO_Y);
+}
+
+/* Estacionamento (aceita vários robôs, não é marcado na grade): os de
+ * robô ocioso e as baias (ver o topo). */
 bool estacionamento(int x, int y)
 {
     int i;
 
     for (i = 0; i < N_BAIAS; i++)
         if (x == BAIA_X[i] && y == BAIA_Y[i]) return true;
-    for (i = 0; i < N_ZONAS; i++)
-        if (x == ZONA_X[i] && y == ZONA_Y[i]) return true;
-    return na_estacao(x, y);
+    return estacionamento_ocioso(x, y);
+}
+
+/* Quantos robôs do grupo "grupo" estão ou reservaram (x, y): n da célula
+ * se ela é desse grupo, senão 0. Retrato instantâneo da grade, sem o
+ * atraso do buffer de status. */
+int robos_do_grupo(int x, int y, int grupo)
+{
+    Ocupacao *o = &mem->ocupacao;
+    int n;
+
+    pthread_mutex_lock(&o->mutex);
+    n = (o->n[y][x] > 0 && o->grupo[y][x] == grupo) ? o->n[y][x] : 0;
+    pthread_mutex_unlock(&o->mutex);
+    return n;
 }
 
 /* Tenta reservar (x, y) para "grupo". Se não pode, retorna false e diz em
@@ -109,8 +141,10 @@ void liberar_celula(int x, int y)
 /* Gestor: procura, com BFS (busca em largura) a partir de (*x, *y), a
  * célula válida (posicao_valida) e LIVRE (n == 0) mais próxima, e já a
  * reserva para "grupo" (o id do robô novo). Tudo sob o mutex da grade,
- * para nenhum robô entrar nela entre a escolha e a reserva. Retorna false
- * se não achou nenhuma (não acontece num mapa com 16 robôs). */
+ * para nenhum robô entrar nela entre a escolha e a reserva. A posição
+ * padrão é estacionamento (n sempre 0): todo robô pedido sem posição
+ * nasce nela, sem se espalhar em volta. Retorna false se não achou
+ * nenhuma (não acontece: o mapa tem ~1500 células livres). */
 bool reservar_livre_perto(int *x, int *y, int grupo)
 {
     static const int DX[4] = {1, -1, 0, 0};

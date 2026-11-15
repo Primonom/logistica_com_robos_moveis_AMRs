@@ -71,7 +71,7 @@
  *   - mem->mutex_tempos (PROCESS_SHARED): no fim de cada ciclo grava a
  *     medição (C, atraso, perdas) em mem->med_ponte; o comando "tempos" lê/
  *     zera ao mesmo tempo. Travado sozinho.
- *   - Buffers JSON estáticos (TAMANHO_JSON = 128 KB, grande demais para a
+ *   - Buffers JSON estáticos (TAMANHO_JSON = 256 KB, grande demais para a
  *     pilha): json_status é usado SÓ por esta thread e json_mapa SÓ pela
  *     thread de rede (publicar_mapa roda no callback ao_conectar). Cada um
  *     tem um único usuário, então não precisam de mutex.
@@ -94,8 +94,8 @@
 
 #define BROKER_PORTA    1883
 #define MANTER_VIVO_S   10      /* keepalive do MQTT, em segundos */
-#define TAMANHO_JSON    131072  /* cabe 64 robôs (~600 B cada, com a rota de 32 cantos)
-                                 * + 128 caixas (~110 B cada) com folga */
+#define TAMANHO_JSON    262144  /* cabe 128 robôs (~600 B cada, com a rota de 32 cantos)
+                                 * + 256 caixas (~110 B cada) com folga */
 #define CICLOS_ENTRE_TENTATIVAS 10  /* 10 x 200 ms = tenta conectar a cada 2 s */
 
 static struct mosquitto *cliente = NULL;  /* ver "Sincronização" no topo */

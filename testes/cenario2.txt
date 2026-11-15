@@ -1,20 +1,26 @@
 # Cenário 2: 4 robôs, 1 caixa de tamanho 3 (acoplamento síncrono; semente 42).
+# Os robôs nascem em células de ESTACIONAMENTO (posição padrão e estações),
+# para não se moverem sozinhos antes da caixa (robô ocioso vai para o
+# estacionamento mais próximo, ver docs/EXPLICACAO.md 8.6):
+#   robô 0 na estação (22,1), do outro lado da parede 1;
+#   robôs 1 e 2 na posição padrão (8,15), perto da baia 2;
+#   robô 3 na estação (37,28), do outro lado de DUAS paredes.
 # Esperado: a equipe são os 3 robôs de MENOR CAMINHO A* até a baia 2:
-# 1 (de (5,15), 6 passos), 0 (de (8,15), 9) e 3 (de (10,20)). O robô 2,
-# em (22,15), está do outro lado da parede 1 e precisaria atravessar a P1:
-# fica DISPONIVEL. O líder é o 1 (o mais perto da baia), não o de menor id.
-# O robô 1 chega primeiro e fica em AGUARDANDO_EQUIPE até os outros
-# chegarem; aí todos recebem ACOPLAR no mesmo ciclo. No transporte só o
-# líder usa os semáforos das passagens.
+# 1 e 2 (empatados) e 0 (que atravessa a P1). O robô 3, mais longe, fica
+# DISPONIVEL. O líder é o 1 (o mais perto da baia; empate com o 2 = menor
+# id), e não o 0, que tem o menor id da equipe.
+# Os robôs 1 e 2 chegam primeiro e ficam em AGUARDANDO_EQUIPE até o 0
+# chegar; aí todos recebem ACOPLAR no mesmo ciclo. No transporte a equipe
+# anda em bloco e só o líder usa os semáforos das passagens.
+novo 22 1
 novo 8 15
-novo 5 15
-novo 22 15
-novo 10 20
+novo 8 15
+novo 37 28
 aguarda 3 DISPONIVEL
 caixa 3 2 C
 aguarda 1 AGUARDANDO_EQUIPE
 status
-aguarda 3 OPERANDO_CARGA
+aguarda 0 OPERANDO_CARGA
 status
 aguarda 1 DISPONIVEL 60
 status

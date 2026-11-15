@@ -3,7 +3,7 @@
 interface/.venv
 **/__pycache__
 *.py[cod]
-*.o
+**/*.o
 logistica
 robo
 logs

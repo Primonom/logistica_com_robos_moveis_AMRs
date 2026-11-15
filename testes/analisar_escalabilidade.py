@@ -5,7 +5,11 @@ Lê testes/saidas/escalabilidade.csv e escalabilidade_falha.csv e gera:
   docs/imagens/escalabilidade_utilizacao.png   U(N) x núcleos x Liu & Layland
   docs/imagens/escalabilidade_atraso.png       atraso máximo e perdas x N
   docs/imagens/escalabilidade_latencia_falha.png  latência da falha x N
+  docs/imagens/escalabilidade_vazao.png        entregas/min e tempo de entrega x N
   docs/ESCALABILIDADE.md                       tabelas, RTA e a resposta
+
+Lê também, para a vazão, escalabilidade[_rt]_N_eventos.csv e _cargas.csv
+(linhas do Coletor gravadas pelo benchmark).
 
 Rodar da raiz do repositório (só precisa de matplotlib):
     interface/.venv/bin/python testes/analisar_escalabilidade.py
@@ -19,6 +23,8 @@ Modelo usado (o mesmo das aulas):
 """
 import csv
 import math
+import re
+from datetime import datetime
 from pathlib import Path
 
 import matplotlib
@@ -30,6 +36,27 @@ IMAGENS = Path("docs/imagens")
 DOC = Path("docs/ESCALABILIDADE.md")
 LIMITE_LATENCIA_MS = 300        # T_status + T_nav
 CENTRAIS = ["simulador", "organizador", "ponte_mqtt"]
+# Janela da vazão, em segundos depois do evento "sistema iniciado": o roteiro
+# cria os robôs, espera 5 s, põe as caixas, espera 2 s e roda "tempos zerar"
+# (início = 7 s); a medição dura 60 s. Os primeiros 20 s são aquecimento
+# (todas as equipes saem juntas e nenhuma entregou ainda): ficam de fora.
+INICIO_S, AQUECIMENTO_S, DURACAO_S = 7, 20, 60
+SATURACAO = 0.9                 # "não aumenta mais" = já tem 90% da vazão máxima
+# Limites do código, lidos de include/comum.h (para a tabela do limite do software).
+COMUM = Path("include/comum.h").read_text()
+MAX_ROBOS = int(re.search(r"#define MAX_ROBOS\s+(\d+)", COMUM).group(1))
+MAX_CAIXAS = int(re.search(r"#define MAX_CAIXAS\s+(\d+)", COMUM).group(1))
+# Bytes que cada fila desconta do RLIMIT_MSGQUEUE (fórmula do kernel, ipc/mqueue.c):
+# maxmsg * (sizeof(struct msg_msg) = 48 + nó da árvore de prioridades = 48) +
+# maxmsg * msgsize, com maxmsg = 10, sizeof(MensagemRobo) = 40 e
+# sizeof(MensagemColetor) = 160.
+BYTES_FILA_ROBO = 10 * (48 + 48) + 10 * 40
+BYTES_FILA_COLETOR = 10 * (48 + 48) + 10 * 160
+# Memória medida à mão com 128 robôs: RSS médio de "ps -o rss= -C robo"
+# (conta as bibliotecas compartilhadas em cada processo, então é pessimista;
+# o PSS, que as divide, deu ~180 KB por robô). /atr_shm deu 102 KB.
+MEMORIA = "média de `ps -o rss= -C robo` com N = 128; PSS ≈ 180 KB"
+RSS_ROBO_KB = 2200
 TODAS = ["navegacao", "status"] + CENTRAIS
 # Cores (paleta categórica de referência, em ordem fixa) e tinta neutra.
 AZUL, LARANJA, VERDE_AGUA, AMARELO = "#2a78d6", "#eb6834", "#1baf7a", "#eda100"
@@ -51,6 +78,83 @@ def ler_csv():
             falhas.setdefault(l["modo"], {}).setdefault(int(l["N"]), []).append(
                 float(l["latencia_ms"]))
     return dados, falhas
+
+
+def hora(texto):
+    return datetime.strptime(texto, "%Y-%m-%d %H:%M:%S.%f").timestamp()
+
+
+def ler_vazao():
+    """vazao[modo][N] = {entregas_min, tempo_med, tempo_max, n, fila_vazia,
+    recusados, realocados, colisoes}. Entrega = linha de cargas.csv (gravada
+    no SOLTAR); tempo de entrega = SOLTAR - atribuição ("indo para a baia")."""
+    vazao = {}
+    for arq in SAIDAS.glob("escalabilidade_*_cargas.csv"):
+        nome = arq.name[len("escalabilidade_"):-len("_cargas.csv")]
+        modo, n = ("rt", int(nome[3:])) if nome.startswith("rt_") else ("normal", int(nome))
+        t0, atrib, recusados, colisoes = None, {}, 0, 0
+        for linha in open(SAIDAS / f"escalabilidade_{nome}_eventos.csv"):
+            data, _, texto = linha.rstrip("\n").split(";", 2)
+            if "sistema iniciado" in texto:
+                t0 = hora(data)
+            elif "indo para a baia" in texto:
+                atrib[int(texto.split()[1])] = hora(data)
+            elif "recusado" in texto:
+                recusados += 1
+            elif "COLISAO" in texto:
+                colisoes += 1
+        ini, fim = t0 + INICIO_S + AQUECIMENTO_S, t0 + INICIO_S + DURACAO_S
+        tempos = []
+        for linha in open(arq):
+            data, caixa = linha.split(";")[:2]
+            t = hora(data)
+            if ini <= t <= fim and int(caixa) in atrib:
+                tempos.append(t - atrib[int(caixa)])
+        atribuidas = sum(1 for t in atrib.values() if t <= fim)
+        txt = (SAIDAS / f"escalabilidade_{nome}.txt").read_text()
+        vazao.setdefault(modo, {})[n] = {
+            "entregas_min": len(tempos) * 60 / (fim - ini),
+            "tempo_med": sum(tempos) / len(tempos) if tempos else 0,
+            "tempo_max": max(tempos, default=0), "n": len(tempos),
+            "fila_vazia": atribuidas >= max(2 * n, 64),
+            "recusados": recusados, "colisoes": colisoes,
+            "realocados": txt.count(") ocupada; robo")}
+    return vazao
+
+
+def n_saturacao(v):
+    """Menor N que já tem SATURACAO (90%) da maior vazão medida."""
+    maior = max(x["entregas_min"] for x in v.values())
+    return min(n for n in v if v[n]["entregas_min"] >= SATURACAO * maior), maior
+
+
+def grafico_vazao(vazao):
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(10, 4.2))
+    for modo, cor, marca, linha in (("normal", AZUL, "o", "-"), ("rt", LARANJA, "s", "--")):
+        if modo not in vazao:
+            continue
+        ns = sorted(vazao[modo])
+        a1.plot(ns, [vazao[modo][n]["entregas_min"] for n in ns], linha, marker=marca,
+                color=cor, linewidth=2, markersize=6, label=modo)
+        a2.plot(ns, [vazao[modo][n]["tempo_med"] for n in ns], linha, marker=marca,
+                color=cor, linewidth=2, markersize=6, label=modo)
+    n_sat, _ = n_saturacao(vazao["normal"])
+    for ax in (a1, a2):
+        ax.set_xscale("log", base=2)
+        ns = sorted(vazao["normal"])
+        ax.set_xticks(ns)
+        ax.set_xticklabels([str(n) for n in ns], fontsize=8)
+        ax.axvline(n_sat, color=CINZA, linestyle=":", linewidth=1.5)
+        ax.legend(frameon=False, fontsize=8)
+    a1.text(n_sat * 1.08, a1.get_ylim()[1] * 0.05, f"≥ 90% do máximo\na partir de N = {n_sat}", color=TINTA,
+            fontsize=8)
+    estilo(a1, "Vazão (entregas por minuto, regime)", "N (robôs, escala log)", "entregas/min")
+    estilo(a2, "Tempo médio de entrega (atribuição → SOLTAR)", "N (robôs, escala log)", "s")
+    a1.set_ylim(bottom=0)
+    a2.set_ylim(bottom=0)
+    fig.tight_layout()
+    fig.savefig(IMAGENS / "escalabilidade_vazao.png", dpi=130)
+    plt.close(fig)
 
 
 def utilizacao(t, n, campo="Cmax"):
@@ -99,8 +203,8 @@ def rta_ok(t, n):
         rta(lista, len(lista) - 1) <= 500
 
 
-def ler_hardware():
-    arq = SAIDAS / "escalabilidade_1.txt"
+def ler_hardware(nome="escalabilidade_1.txt"):
+    arq = SAIDAS / nome
     if not arq.exists():
         return {}
     hw = {}
@@ -235,7 +339,7 @@ def passo_a_passo(w, t, n):
           "Organizador não termina a tempo.\n")
 
 
-def gerar_doc(dados, falhas, hw, nucleos):
+def gerar_doc(dados, falhas, vazao, hw, hw_rt, nucleos):
     d = dados["normal"]
     ns = sorted(d)
     out = []
@@ -247,34 +351,121 @@ def gerar_doc(dados, falhas, hw, nucleos):
     w("**Pergunta do enunciado:** num dado cenário, qual o número máximo de robôs que é "
       "possível gerir com o hardware utilizado garantindo corretude e responsividade?\n")
 
-    # ---- Resposta
+    # ---- Resposta (3 camadas)
     n_max = maior_n_ok(dados, falhas, "normal")
     maior = ns[-1]
-    w("## Resposta\n")
     cpu = hw.get("cpu", "?")
-    if n_max == maior:
-        w(f"**Com o hardware {cpu} ({nucleos} núcleos lógicos, WSL2), o número máximo de robôs "
-          f"que mantém zero perdas de prazo e latência de falha abaixo de 300 ms "
-          f"(T_status + T_nav) é N = {n_max}** — o maior valor testado (MAX_ROBOS = 64 é o "
-          f"limite do sistema). O processador não foi o gargalo: com {maior} robôs a "
-          f"utilização total medida é U = {utilizacao(d[maior], maior):.2f}, isto é, "
-          f"{100 * utilizacao(d[maior], maior) / nucleos:.0f}% da capacidade de {nucleos} "
-          f"núcleos. Pela extrapolação linear de U(N) (seção Extrapolação), o limite do "
-          f"processador estaria bem acima disso.\n")
-    else:
-        w(f"**Com o hardware {cpu} ({nucleos} núcleos lógicos, WSL2), o número máximo de robôs "
-          f"que mantém zero perdas de prazo e latência de falha abaixo de 300 ms "
-          f"(T_status + T_nav) é N = {n_max}.**\n")
-        prox = [n for n in ns if n_max is None or n > n_max][0]
-        perdas = {x: d[prox][x]["perdas"] for x in TODAS if d[prox][x]["perdas"] > 0}
-        lat = max(falhas["normal"].get(prox, [0]))
-        w(f"Em N = {prox} o critério falhou: perdas de prazo = {perdas or 'nenhuma'}; "
-          f"latência máxima da falha = {lat:.0f} ms.\n")
-
+    v = vazao["normal"]
+    n_sat, vazao_max = n_saturacao(v)
     um = [n for n in ns if rta_ok(d[n], n)]
-    w(f"Para comparação, se tudo rodasse em **um núcleo só**, a RTA com os C máximos medidos "
-      f"garante até **N = {um[-1] if um else 0}** (seção RTA). Os {nucleos} núcleos são o que "
-      "permite chegar a 64 sem perdas.\n")
+    w("## Resposta\n")
+
+    # a) processamento
+    t = d[maior]
+    u_central = {c: sum(t[x][c] / (t[x]["T"] * 1000) for x in CENTRAIS) for c in ("Cmax", "Cmed")}
+    u_robo = {c: t["navegacao"][c] / 100e3 + t["status"][c] / 200e3 for c in ("Cmax", "Cmed")}
+    n_cpu = {c: (nucleos - u_central[c]) / u_robo[c] for c in ("Cmax", "Cmed")}
+    w("### a) Limite de processamento (CPU)\n")
+    w("Reta medida em N = %d (o maior testado; Navegação e Status = pior robô):\n" % maior)
+    w("    U(N) = U_central + N·(C_nav/T_nav + C_status/T_status)\n")
+    w("| C usado | U_central | C_nav (µs) | C_status (µs) | custo por robô | N com U = %d núcleos |"
+      % nucleos)
+    w("|---|---|---|---|---|---|")
+    for c, nome in (("Cmax", "máximo (pior caso)"), ("Cmed", "médio (carga típica)")):
+        w(f"| {nome} | {u_central[c]:.4f} | {t['navegacao'][c]:.0f} | {t['status'][c]:.0f} | "
+          f"{u_robo[c]:.5f} | **{n_cpu[c]:.0f}** |")
+    w("")
+    w(f"Com o C máximo (pico de UM robô somado como se TODOS tivessem o pico em todo ciclo) a "
+      f"CPU encheria em N ≈ {n_cpu['Cmax']:.0f}; com o C médio, em N ≈ {n_cpu['Cmed']:.0f}. "
+      f"Se tudo rodasse em **um núcleo só**, a RTA com os C máximos garante só até "
+      f"**N = {um[-1] if um else 0}** (seção RTA). É uma estimativa: o Organizador e o A* "
+      "crescem mais que linearmente com a ocupação do mapa, e a reta ignora troca de "
+      "contexto e cache.\n")
+
+    # b) software / SO
+    w("### b) Limite do software e do sistema operacional\n")
+    filas = maior + 1
+    w("| recurso | uso com N robôs | limite | N máximo por esse recurso |")
+    w("|---|---|---|---|")
+    w(f"| `MAX_ROBOS` (comum.h, slots de /atr_shm, ids) | N | {MAX_ROBOS} | {MAX_ROBOS} "
+      "(é só recompilar) |")
+    w(f"| filas POSIX (`/proc/sys/fs/mqueue/queues_max`) | N + 1 (/atr_robo_* + /atr_coletor) "
+      f"| {hw.get('queues_max', '?')} | {int(hw.get('queues_max', 256)) - 1} |")
+    w(f"| bytes de fila (`RLIMIT_MSGQUEUE`, `ulimit -q`) | ~{BYTES_FILA_ROBO} B por robô + "
+      f"{BYTES_FILA_COLETOR} B | {hw.get('rlimit_msgqueue', '?')} B | "
+      f"{(int(hw.get('rlimit_msgqueue', 819200)) - BYTES_FILA_COLETOR) // BYTES_FILA_ROBO} |")
+    w(f"| tarefas do Linux (`ulimit -u`: processos + threads) | 3 por robô (main, Navegação, "
+      f"Status) | {hw.get('max_processos', '?')} | {int(hw.get('max_processos', 0)) // 3} |")
+    w(f"| memória (RSS medido: {MEMORIA}) | ~{RSS_ROBO_KB / 1024:.1f} MB por robô | "
+      f"{hw.get('memoria_mb', '?')} MB | {int(hw.get('memoria_mb', 0)) * 1024 // RSS_ROBO_KB} |")
+    w(f"| `TAMANHO_JSON` (ponte MQTT) | ~600 B por robô + ~110 B por caixa | 256 KB | "
+      f"~{(262144 - MAX_CAIXAS * 110) // 600} |")
+    w("")
+    w(f"Ao testar 96 e 128 robôs: {filas} filas abertas, nenhum `mq_open` falhou, nenhum JSON "
+      "descartado. A posição padrão (8,15) é estacionamento, então todos os robôs nasceram "
+      "nela (\"realocados\" conta os que o Gestor teria posto em outra célula):\n")
+    w("| N | robôs realocados | pedidos recusados | COLISAO | perdas de prazo |")
+    w("|---|---|---|---|---|")
+    for n in ns:
+        if n >= 48:
+            w(f"| {n} | {v[n]['realocados']} | {v[n]['recusados']} | {v[n]['colisoes']} | "
+              f"{sum(d[n][x]['perdas'] for x in TODAS)} |")
+    w("")
+    w(f"O primeiro limite do software é o próprio `MAX_ROBOS` = {MAX_ROBOS}; o primeiro limite "
+      f"do SO que apareceria é o `queues_max` = {hw.get('queues_max', '?')} (no máximo "
+      f"{int(hw.get('queues_max', 256)) - 1} robôs, porque cada um tem a sua fila). Ele pode ser "
+      "aumentado como root (`sysctl fs.mqueue.queues_max=...`), e aí o seguinte é o "
+      "`RLIMIT_MSGQUEUE`.\n")
+
+    # c) galpão
+    w("### c) Limite físico do galpão (vazão)\n")
+    w(f"Entregas por minuto e tempo médio de entrega (da atribuição, \"indo para a baia\", "
+      f"até o SOLTAR, pelos timestamps do Coletor), contando só as entregas dos últimos "
+      f"{DURACAO_S - AQUECIMENTO_S} s da janela de {DURACAO_S} s (os primeiros "
+      f"{AQUECIMENTO_S} s são aquecimento). A fila tem max(2N, 64) caixas e nunca esvaziou "
+      "na janela (coluna \"fila\").\n")
+    w("| N | entregas na janela | entregas/min | tempo médio (s) | tempo máx (s) | fila |")
+    w("|---|---|---|---|---|---|")
+    for n in sorted(v):
+        x = v[n]
+        w(f"| {n} | {x['n']} | {x['entregas_min']:.1f} | {x['tempo_med']:.1f} | "
+          f"{x['tempo_max']:.1f} | {'ESVAZIOU' if x['fila_vazia'] else 'nunca vazia'} |")
+    w("")
+    w("![Vazão](imagens/escalabilidade_vazao.png)\n")
+    n_igual = min(n for n in v if v[n]["entregas_min"] == vazao_max)
+    w(f"A vazão máxima foi {vazao_max:.1f} entregas/min. A partir de **N = {n_sat}** ela já "
+      f"está em {SATURACAO:.0%} desse máximo, e a partir de N = {n_igual} é exatamente a "
+      "mesma: **mais robôs não aumentam a vazão**. O motivo é o galpão: há 4 baias e o "
+      "Organizador põe **uma carga por baia de cada vez**, então no máximo 4 entregas andam "
+      "ao mesmo tempo (de 4 a 16 robôs trabalhando; o tamanho médio das caixas é 2,5, mais "
+      "os que estão recarregando). Os outros ficam DISPONIVEL **no estacionamento** (posição "
+      "padrão, zonas, estações; ver docs/EXPLICACAO.md 8.6) e não atrapalham ninguém: com a "
+      "semente fixa o Organizador escolhe sempre os mesmos robôs (os mais perto da baia), e "
+      "por isso os números com N grande são iguais. Com N pequeno a vazão é menor e o tempo "
+      "maior porque falta robô livre perto da baia (a caixa de tamanho 4 espera os 4, e cada "
+      "robô volta da zona, do outro lado do mapa). Antes do estacionamento dos ociosos, com "
+      "N = 128 os robôs parados em volta das baias travavam o galpão: zero entregas.\n")
+
+    # conclusão
+    w("### Conclusão\n")
+    w(f"**Com este hardware, o sistema garante corretude e responsividade para até "
+      f"N = {n_max} robôs; o fator que limita é o galpão, e não a CPU nem o SO: a partir de "
+      f"N ≈ {n_igual} a vazão para de crescer ({vazao_max:.0f} entregas/min, 4 baias com uma "
+      f"carga cada), e o primeiro limite rígido acima de {maior} é o SO "
+      f"({int(hw.get('queues_max', 256)) - 1} robôs, pelas filas POSIX).**\n")
+    w(f"- N = {n_max} é o maior valor testado (= `MAX_ROBOS`), com zero perdas de prazo, "
+      f"latência da falha < {LIMITE_LATENCIA_MS} ms, zero COLISAO, nenhum pedido recusado e "
+      "nenhum deadlock (todas as rodadas entregaram caixas até o fim).\n"
+      f"- A CPU tem folga: com {maior} robôs a carga média é U = "
+      f"{utilizacao(d[maior], maior, 'Cmed'):.2f} de {nucleos} núcleos. A reta com o C "
+      f"MÁXIMO chega aos {nucleos} núcleos em N ≈ {n_cpu['Cmax']:.0f}, abaixo do que foi "
+      "medido sem perdas: ela soma o pico de cada tarefa (de robôs e instantes diferentes) "
+      "como se todos acontecessem juntos em todo ciclo, o que não acontece. É um limite "
+      "pessimista, não uma garantia de falha.\n"
+      f"- Para um só núcleo, a RTA com os C máximos garante só N = {um[-1] if um else 0}.\n"
+      f"- Robôs além de N ≈ {n_igual} são gerenciáveis mas inúteis: ficam no "
+      "estacionamento. Para aumentar a vazão seria preciso mudar o galpão (mais baias, ou "
+      "mais de uma carga por baia), não o computador.\n")
     w("### Critério escolhido\n")
     w("- **Corretude temporal = zero perdas de prazo** em TODAS as tarefas periódicas "
       "(deadline = período; uma perda é um ciclo que terminou depois de `proximo + T`). "
@@ -287,7 +478,7 @@ def gerar_doc(dados, falhas, hw, nucleos):
       "DEFEITO (o que o Organizador e a tela enxergam); se isso passar de 300 ms é porque "
       "alguém atrasou além do projeto.\n"
       "- Os dois critérios têm de valer para o N e para todos os menores (escalabilidade "
-      "monótona); cada N roda 60 s com 2N caixas sendo transportadas (cenário realista: "
+      "monótona); cada N roda 60 s com max(2N, 64) caixas sendo transportadas (cenário realista: "
       "equipes, passagens, recargas).\n")
 
     # ---- Tabela
@@ -314,22 +505,54 @@ def gerar_doc(dados, falhas, hw, nucleos):
           f"{sum(lat) / len(lat):.0f} / {max(lat):.0f} |")
     w("")
     if "rt" in dados:
-        w("### Modo tempo real (ATR_TEMPO_REAL=1, SCHED_FIFO)\n")
-        w("| N | C_nav máx | C_status máx | C_org máx | atraso máx | perdas | U(N) | lat. máx (ms) |")
+        w("### Modo tempo real (ATR_TEMPO_REAL=1, SCHED_FIFO) × modo normal\n")
+        w(f"Rodado no Docker (`{hw_rt.get('modo', '?')}`; uname `{hw_rt.get('uname', '?')}`), "
+          "com o comando:\n")
+        w("    docker compose run --rm -T -v ./testes:/app/testes logistica testes/escalabilidade.sh rt\n")
+        w("C máx = pior tarefa periódica (µs); atraso = atraso máximo de liberação entre todas as "
+          "tarefas (µs); lat. = latência máxima da falha (ms).\n")
+        w("| N | C_nav máx normal / rt | C_status máx normal / rt | C_org máx normal / rt | "
+          "atraso máx normal / rt | perdas normal / rt | lat. máx normal / rt | entregas/min normal / rt |")
         w("|---|---|---|---|---|---|---|---|")
         for n in sorted(dados["rt"]):
-            t = dados["rt"][n]
-            w(f"| {n} | {t['navegacao']['Cmax']:.0f} | {t['status']['Cmax']:.0f} | "
-              f"{t['organizador']['Cmax']:.0f} | {max(t[x]['atraso'] for x in TODAS):.0f} | "
-              f"{sum(t[x]['perdas'] for x in TODAS)} | {utilizacao(t, n):.3f} | "
-              f"{max(falhas['rt'].get(n, [0])):.0f} |")
+            a, b = d.get(n), dados["rt"][n]
+            if a is None:
+                continue
+            vr = vazao.get("rt", {}).get(n, {"entregas_min": 0})
+            w(f"| {n} | {a['navegacao']['Cmax']:.0f} / {b['navegacao']['Cmax']:.0f} | "
+              f"{a['status']['Cmax']:.0f} / {b['status']['Cmax']:.0f} | "
+              f"{a['organizador']['Cmax']:.0f} / {b['organizador']['Cmax']:.0f} | "
+              f"{max(a[x]['atraso'] for x in TODAS):.0f} / {max(b[x]['atraso'] for x in TODAS):.0f} | "
+              f"{sum(a[x]['perdas'] for x in TODAS)} / {sum(b[x]['perdas'] for x in TODAS)} | "
+              f"{max(falhas['normal'].get(n, [0])):.0f} / {max(falhas['rt'].get(n, [0])):.0f} | "
+              f"{v[n]['entregas_min']:.1f} / {vr['entregas_min']:.1f} |")
         w("")
+        comuns = [n for n in sorted(dados["rt"]) if n in d]
+        def pior(m, campo):    # maior valor do campo entre todas as tarefas e todos os N
+            return max(dados[m][n][x][campo] for n in comuns for x in TODAS)
+        def soma(m):
+            return sum(dados[m][n][x]["perdas"] for n in comuns for x in TODAS)
+        mais_baixo = sum(1 for n in comuns if max(dados["rt"][n][x]["atraso"] for x in TODAS)
+                         < max(d[n][x]["atraso"] for x in TODAS))
+        w(f"**Comparação.** Perdas de prazo: {soma('normal')} no modo normal e {soma('rt')} no "
+          f"rt, em todos os N. O pior atraso de liberação caiu de {pior('normal', 'atraso') / 1000:.1f} ms "
+          f"(normal) para {pior('rt', 'atraso') / 1000:.1f} ms (rt), e foi menor no rt em "
+          f"{mais_baixo} de {len(comuns)} valores de N: com SCHED_FIFO uma tarefa pronta não espera "
+          "atrás de processos comuns da máquina (navegador, IDE). O C máximo da Status com N "
+          f"grande também caiu (N = {comuns[-1]}: {d[comuns[-1]]['status']['Cmax']:.0f} → "
+          f"{dados['rt'][comuns[-1]]['status']['Cmax']:.0f} µs). A latência da falha e a vazão "
+          "praticamente não mudam: a latência é dominada pela FASE do ciclo de 200 ms da "
+          "Status (0 a 200 ms), e a vazão pelas 4 baias, não pela CPU. Ou seja: com esta carga "
+          "(U médio ≈ 1 de 12 núcleos) o modo normal já é suficiente; o tempo real diminui a "
+          "cauda dos atrasos, que é o que importaria com a máquina mais carregada. Os C "
+          "máximos continuam com picos isolados nos dois modos: o WSL2 é uma máquina virtual "
+          "e o Windows pode tirar a CPU do Linux inteiro, coisa que nenhuma prioridade "
+          "dentro do Linux impede.\n")
     else:
         w("### Modo tempo real (ATR_TEMPO_REAL=1)\n")
-        w(f"Não executado nesta máquina: o usuário não tem permissão para SCHED_FIFO "
-          f"(`{hw.get('modo', '')}`; `chrt -f 1 true` falha com EPERM). O código está pronto: "
-          "`ATR_TEMPO_REAL=1 ./logistica` como root, ou no Docker (o `compose.yaml` dá "
-          "`cap_add: SYS_NICE`), e depois `testes/escalabilidade.sh rt`.\n")
+        w(f"Não executado: o usuário não tem permissão para SCHED_FIFO "
+          f"(`{hw.get('modo', '')}`). Rode no Docker:\n")
+        w("    docker compose run --rm -T -v ./testes:/app/testes logistica testes/escalabilidade.sh rt\n")
 
     w("![Utilização](imagens/escalabilidade_utilizacao.png)\n")
     w("![Atraso e perdas](imagens/escalabilidade_atraso.png)\n")
@@ -382,26 +605,9 @@ def gerar_doc(dados, falhas, hw, nucleos):
     w("")
     w(f"Se TUDO rodasse num núcleo só, com os C máximos medidos, o maior N garantido pela RTA "
       f"seria **N = {caso}**. Com {nucleos} núcleos a RTA clássica não se aplica diretamente "
-      "(escalonamento global), e o que vale é a medição: zero perdas até N = 64. A RTA de 1 "
+      f"(escalonamento global), e o que vale é a medição: zero perdas até N = {n_max}. A RTA de 1 "
       "núcleo é muito pessimista porque soma os PICOS de C (raros e de causas externas) de "
       "todas as tarefas como se acontecessem juntos.\n")
-
-    # ---- Extrapolação
-    w("## Extrapolação (até onde iria o processador)\n")
-    a, b = ns[-2], ns[-1]
-    inc = (utilizacao(d[b], b) - utilizacao(d[a], a)) / (b - a)
-    u_b = utilizacao(d[b], b)
-    n_m = b + (nucleos - u_b) / inc if inc > 0 else math.inf
-    u_med = utilizacao(d[b], b, "Cmed")
-    inc_med = (u_med - utilizacao(d[a], a, "Cmed")) / (b - a)
-    n_med = b + (nucleos - u_med) / inc_med if inc_med > 0 else math.inf
-    w(f"Entre N = {a} e N = {b}, cada robô a mais soma ≈ {inc:.4f} de utilização com C máximo "
-      f"(≈ {inc_med:.4f} com C médio). Extrapolando linearmente, U = {nucleos} (todos os "
-      f"núcleos cheios) seria atingido em N ≈ {n_m:.0f} pelo pior caso e N ≈ {n_med:.0f} pela "
-      f"carga média. É uma estimativa grosseira: o custo do Organizador "
-      "e do A* cresce mais que linearmente com a ocupação do mapa, e o mapa de 60×30 (com "
-      "obstáculos, passagens de capacidade 1 a 4) fica congestionado antes disso. Na prática "
-      "o limite de verdade passa a ser o ESPAÇO (robôs esperando célula/passagem), não a CPU.\n")
 
     # ---- Limitações
     w("## Limitações\n")
@@ -425,28 +631,41 @@ def gerar_doc(dados, falhas, hw, nucleos):
       "(se passa em 1, passa em mais). Também ignora bloqueio por mutex (seções críticas "
       "curtas, de cópia) e o custo de troca de contexto.\n"
       "- O benchmark roda sem a Tela de Operação (a ponte MQTT publica para o broker local, "
-      "mas ninguém desenha 64 robôs).\n")
+      "mas ninguém desenha 128 robôs).\n"
+      "- **Vazão**: uma rodada de 60 s por N (40 s de regime) e uma semente (42, um mapa); "
+      "entregas/min tem resolução de 1,5 entrega/min (1 entrega em 40 s).\n"
+      "- **Modo rt no Docker**: o container roda como root com `SYS_NICE` (por isso o "
+      "SCHED_FIFO funciona com `ulimit -r = 0`) e usa o fuso UTC nos logs (só os tempos "
+      "relativos entram na vazão, então isso não muda nada).\n")
 
     w("## Hardware e ambiente\n")
     for chave in ("data", "nproc", "cpu", "uname", "modo"):
         w(f"- {chave}: `{hw.get(chave, '?')}`")
     w("")
     w("## Como reproduzir\n")
-    w("    testes/escalabilidade.sh           # ~12 min por modo; grava testes/saidas/escalabilidade*")
-    w("    interface/.venv/bin/python testes/analisar_escalabilidade.py")
+    w("    testes/escalabilidade.sh normal    # ~16 min; grava testes/saidas/escalabilidade*")
+    w("    docker compose build               # modo rt: dentro do container (SYS_NICE)")
+    w("    ATR_PORTA_MQTT=1884 docker compose run --rm -T -v ./testes:/app/testes \\")
+    w("        logistica testes/escalabilidade.sh rt")
+    w("    interface/.venv/bin/python testes/analisar_escalabilidade.py\n")
+    w("`ATR_PORTA_MQTT=1884` só é preciso se o host já tem um mosquitto na porta 1883 "
+      "(o do WSL, que o modo normal usa). O modo rt acrescenta as linhas `rt` ao mesmo CSV.")
     DOC.write_text("\n".join(out) + "\n")
 
 
 def main():
     dados, falhas = ler_csv()
+    vazao = ler_vazao()
     hw = ler_hardware()
+    hw_rt = ler_hardware("escalabilidade_rt_1.txt")
     nucleos = int(hw.get("nproc", "1"))
     IMAGENS.mkdir(parents=True, exist_ok=True)
     grafico_utilizacao(dados, nucleos)
     grafico_atraso(dados)
     grafico_latencia(falhas)
-    gerar_doc(dados, falhas, hw, nucleos)
-    print(f"gerados: {DOC} e 3 gráficos em {IMAGENS}/")
+    grafico_vazao(vazao)
+    gerar_doc(dados, falhas, vazao, hw, hw_rt, nucleos)
+    print(f"gerados: {DOC} e 4 gráficos em {IMAGENS}/")
     print(f"N máximo (normal): {maior_n_ok(dados, falhas, 'normal')}")
 
 

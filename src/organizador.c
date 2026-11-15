@@ -320,8 +320,7 @@ static void acompanhar_equipe(Equipe *e)
         msg.y = ZONA_Y[z];
         msg.carga_id = e->caixa.id;
         msg.lider_id = e->lider;
-        msg.n_membros = e->n;           /* o líder precisa saber quem é a equipe */
-        memcpy(msg.membros, e->membros, sizeof(msg.membros));
+        msg.n_membros = e->n;           /* o líder espera os n_membros na célula dele */
         enviar_todos(e, &msg);
         e->fase = TRANSPORTANDO;
         snprintf(texto, sizeof(texto), "caixa %d: erguida por todos, IR_ZONA %c (lider %d)",

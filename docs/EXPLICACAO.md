@@ -437,18 +437,38 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
 - **Por que opcional:** SCHED_FIFO numa máquina compartilhada pode tomar a
   CPU de tudo; por padrão o sistema roda como antes.
 
-### 5.3 Limites para 64 robôs (`MAX_ROBOS = 64`)
-- `MAX_CAIXAS` = 128 (o benchmark põe 2 caixas por robô); `MAX_PEDIDOS` do
-  Gestor = `MAX_ROBOS` (o benchmark pede N robôs de uma vez).
-- Ponte: `TAMANHO_JSON` = 128 KB (≈600 B por robô com a rota + ≈110 B por
-  caixa). Grande demais para a pilha, então os dois buffers são **estáticos**:
-  `json_status` (só a thread da ponte) e `json_mapa` (só a thread de rede,
-  callback `ao_conectar`). Cada um tem um único usuário → sem mutex.
-- Filas POSIX: 64 `/atr_robo_*` + `/atr_coletor` = 65 filas; o limite do
-  sistema é `/proc/sys/fs/mqueue/queues_max` = 256 e cada fila (10 mensagens
-  de 40 B ou 152 B) gasta ≈1–2 KB do `RLIMIT_MSGQUEUE` (`ulimit -q` = 800 KB
-  por usuário): ≈70 KB no total. `msg_max` = 10 continua valendo.
-- `TAMANHO_RESPOSTA` (32 KB) não mudou: o `status` com 64 robôs tem ≈6 KB.
+### 5.3 Limites para 128 robôs (`MAX_ROBOS = 128`)
+- **Onde:** `include/comum.h` (`MAX_ROBOS`, `MAX_CAIXAS`), `src/ponte_mqtt.c`
+  (`TAMANHO_JSON`), `src/gestor.c` (`MAX_PEDIDOS`).
+- **Problema:** responder "qual o número MÁXIMO de robôs" exige testar além
+  de 64. Tudo que tem tamanho fixo pelo número de robôs tem de caber.
+- **Como:** `MAX_ROBOS` = 128 e `MAX_CAIXAS` = 256 (o benchmark põe
+  max(2N, 64) caixas); `MAX_PEDIDOS` = `MAX_ROBOS` (o benchmark pede N robôs
+  de uma vez). Ponte: `TAMANHO_JSON` = 256 KB (≈600 B por robô com a rota +
+  ≈110 B por caixa: 128 × 600 + 256 × 110 ≈ 105 KB). Grande demais para a
+  pilha, então os dois buffers são **estáticos**: `json_status` (só a thread
+  da ponte) e `json_mapa` (só a thread de rede, callback `ao_conectar`). Cada
+  um tem um único usuário → sem mutex. `TAMANHO_RESPOSTA` (32 KB) não mudou:
+  o `status` com 128 robôs e 256 caixas tem ≈22 KB.
+- **Limites do SO conferidos** (o benchmark grava os valores no começo de
+  cada `testes/saidas/escalabilidade_N.txt`):
+  - filas POSIX: 128 `/atr_robo_*` + `/atr_coletor` = 129 filas; o limite é
+    `/proc/sys/fs/mqueue/queues_max` = 256 → **no máximo 255 robôs** (é o
+    primeiro limite do SO; root pode aumentar com `sysctl`);
+  - `RLIMIT_MSGQUEUE` (`ulimit -q` = 800 KB por usuário): cada fila desconta
+    maxmsg × (48 + 48) B de controle + maxmsg × msgsize → 1360 B por robô e
+    2560 B do Coletor; com 128 robôs ≈ 177 KB (daria ≈600 robôs);
+  - `msg_max` = 10 continua valendo (`MAX_MSG_FILA` = 10);
+  - processos/threads (`ulimit -u` ≈ 31 mil): 3 tarefas por robô (a thread
+    principal do processo `robo`, a Navegação e a Status).
+- **Sem ele:** com `MAX_ROBOS` = 64 o 65º pedido seria recusado ("sem id
+  livre") e o "máximo" medido seria só o limite do código; com o JSON
+  pequeno a ponte descartaria o `atr/status` (mensagem "grande demais").
+- **Gestor com muitos robôs:** a posição padrão (8,15) é estacionamento
+  (8.6), então todos os robôs pedidos sem posição nascem nela. Um pedido
+  com posição ocupada vai para a célula livre mais próxima (BFS de
+  `reservar_livre_perto`). Com 128 robôs nenhum pedido foi recusado (ver
+  docs/ESCALABILIDADE.md).
 
 ---
 
@@ -696,25 +716,17 @@ Organizador).
   (`MAX_ROTA_STATUS`); a tela liga os pontos com retas.
 
 ### 7.6 Equipes com o novo caminho
-- **Seguidor:** a cada ciclo, A* da posição dele até a posição **atual** do
-  líder (lida do buffer de status do líder) e um passo só (1ª célula do
+- **Seguidor:** a cada ciclo, A* da posição dele até a **célula atual** do
+  líder (campo `celula_x/y` do slot do líder) e um passo só (1ª célula do
   caminho). Não usa semáforo: a equipe ocupa 1 vaga.
-- **`IR_ZONA` leva a equipe:** `n_membros` e `membros[4]`, para o líder saber
-  de quem esperar.
-
-#### Mecanismo: o líder só libera a passagem quando a equipe inteira saiu
-- **Onde:** `navegacao.c: liberar_se_saiu` / `equipe_saiu`.
-- **Problema:** o seguidor anda 1–2 células atrás do líder. Se o líder fizesse
-  `sem_post` assim que ele mesmo saísse, outro robô poderia entrar com o
-  seguidor ainda dentro (mais robôs que a capacidade).
-- **Como:** o líder lê a posição de cada membro **no buffer de status** (um
-  mutex por vez, cópia local, regra anti-deadlock). Um membro só conta como
-  "saiu" depois de ter sido **visto dentro** da região (flag
-  `visto_dentro[k]`): o buffer tem até 200 ms de atraso, e um seguidor que
-  acabou de entrar ainda pode aparecer do lado de fora, antes da boca.
-- **Sem isso:** a passagem de capacidade 1 poderia ter o seguidor de uma
-  equipe e outro robô ao mesmo tempo (era a simplificação antiga "seguidor
-  dentro da passagem depois que o líder liberou", que deixou de existir).
+- **`IR_ZONA` leva o tamanho da equipe** (`n_membros`): o líder só anda com
+  a equipe toda na célula dele (equipe em bloco, 8.6). O mesmo teste decide
+  quando o líder devolve a passagem: ele já saiu da região e a equipe está
+  na célula dele (`liberar_se_saiu` + `equipe_junta`). Isso substituiu o
+  mecanismo antigo (o líder lia a posição de cada membro no buffer de
+  status e esperava cada um ser "visto dentro" e depois "fora" da região):
+  com a equipe em bloco, "a equipe na minha célula, fora da região" já
+  garante que ninguém da equipe ficou para trás no túnel.
 
 ### 7.7 Por que isto é "IA"
 - O A* é o algoritmo clássico de **busca heurística informada** da IA: em
@@ -753,11 +765,12 @@ replanejamento ocasional do desvio (um A*, só quando trava).
   está numa equipe de transporte com mais de 1 robô (a equipe anda junta e
   entra nas células umas das outras). Regra para **entrar**: pode se
   `n == 0` ou se `grupo == meu grupo`.
-- **Células de estacionamento** (baias, zonas, estações) aceitam vários
-  robôs e não são nem verificadas nem marcadas: a equipe se **reúne** na
-  baia, **entrega** na zona e vários robôs podem **recarregar** na mesma
-  estação. Sem isso, os robôs que ficam parados na zona depois da entrega
-  bloqueariam a próxima entrega naquela zona para sempre.
+- **Células de estacionamento** (baias, zonas, estações e a posição padrão
+  (8,15) do Gestor) aceitam vários robôs e não são nem verificadas nem
+  marcadas: a equipe se **reúne** na baia, **entrega** na zona, vários
+  robôs podem **recarregar** na mesma estação e os robôs novos **nascem**
+  todos na posição padrão. Sem isso, os robôs que ficam parados na zona
+  depois da entrega bloqueariam a próxima entrega naquela zona para sempre.
 - **Por que um mutex só para a grade inteira:** a seção crítica é minúscula
   (testar e marcar 1 célula). Um mutex por célula seriam 1800 mutexes, mais
   difícil de explicar, sem ganho real (os robôs passam microssegundos nela).
@@ -845,12 +858,104 @@ replanejamento ocasional do desvio (um A*, só quando trava).
 - **Robô em DEFEITO** continua ocupando a(s) célula(s) dele (fisicamente
   está ali); os outros desviam dele por este mecanismo.
 - **Seguidores** também usam a grade (entram livres nas células do próprio
-  grupo). Travados, dão um passo pelo caminho que evita os outros robôs, mas
-  esse desvio **nunca usa uma passagem** (quem paga a vaga é o líder; se o
-  líder já está do outro lado, o seguidor espera).
+  grupo). Com a equipe em bloco (8.6) o seguidor só pisa na célula do
+  líder, que é do grupo dele: a reserva nunca falha e ele não precisa de
+  desvio (o desvio do seguidor foi removido).
 - **Sem isso:** dois robôs frente a frente esperariam um pelo outro para
   sempre (deadlock clássico: cada um segura uma célula e espera a do outro).
   O desvio quebra a espera circular.
+
+### 8.6 Equipe em bloco e robô ocioso (eliminam o deadlock do benchmark)
+
+**O deadlock que o benchmark achou** (N = 8, semente 42, reproduzido pelo
+cenário 11). As caixas 1, 2 e 3 vão para a zona A e as três equipes cruzam
+as mesmas passagens, P1 e depois P3, para a direita:
+1. o líder 3 entrou na P1 e o líder **4 (equipe 2)** entrou 2 ms depois, no
+   mesmo sentido (a P1 tem vaga). Os seguidores 1 e 6 do líder 3 ainda não
+   tinham entrado: a **equipe 2 ficou entre o líder 3 e os seguidores dele**;
+2. o líder 3 pegou a P3 e seguiu até (42,23). Pela regra antiga ele só
+   devolveria a P3 quando os seguidores saíssem dela;
+3. a equipe 2 esperava a P3 (cheia, capacidade 1), parada na boca;
+4. os seguidores 1 e 6 estavam atrás da equipe 2 e não passavam por ela.
+
+Espera circular: **P3 (com o líder 3) → seguidores do 3 → células da
+equipe 2 → P3**. Nenhuma entrega até o fim da rodada.
+
+Das 4 condições de Coffman para deadlock (exclusão mútua, segura e espera,
+sem preempção, espera circular), as três primeiras são do próprio problema:
+uma célula e uma vaga de passagem são exclusivas, ninguém toma a vaga de
+outro, e uma equipe segura as células dela enquanto anda. As duas regras
+quebram a **espera circular**.
+
+#### Regra 1: a equipe anda em bloco
+- **Onde:** `navegacao.c: equipe_junta`, `seguir_caminho` (o líder) e
+  `seguir_lider` (o seguidor); `ocupacao.c: robos_do_grupo`;
+  `comum.h: Robo.celula_x/y`.
+- **Problema:** o seguidor andava 1–2 células atrás do líder, e entre eles
+  ficava uma **célula livre**: qualquer robô de outro grupo podia entrar
+  nela (foi o que a equipe 2 fez). Aí o líder ficava separado da equipe,
+  segurando um recurso (a P3) que só soltaria quando a equipe chegasse.
+- **Como:** durante o transporte o líder só dá o próximo passo quando a
+  equipe toda está na célula dele. Ele confere na **grade** (tempo real,
+  sem o atraso de 200 ms do buffer de status): `n` da célula dele, com o
+  grupo da equipe, `== tamanho da equipe`. Cada seguidor dá um passo para a
+  célula do líder. Um seguidor conta assim que **reserva** a célula do
+  líder, e até chegar nela ele ainda segura a anterior, que é vizinha. Então
+  as células da equipe são sempre uma corrente sem buraco: **nunca existe
+  uma célula livre entre o líder e os seguidores**. O seguidor lê a célula
+  do líder no campo `celula_x/y` do slot dele, que a Navegação do líder
+  escreve ao chegar numa célula (como já faz com `grupo`; o buffer de
+  status levaria até 200 ms a mais por passo). Na baia (estacionamento,
+  não marcada na grade) a equipe já está toda junta (o Organizador só
+  manda `IR_ZONA` com todos na baia). Numa célula de estacionamento no
+  meio do caminho o líder não consegue contar e segue: ali qualquer robô
+  pode entrar, então não há "meio da equipe" que alguém possa ocupar, e
+  ele espera a equipe na célula seguinte (marcada).
+- **Por que quebra a espera circular:** ninguém entra no meio de uma
+  equipe, então um líder nunca fica de um lado de outro robô com os
+  seguidores do outro. A passagem é devolvida quando o líder está fora da
+  região **e** a equipe está na célula dele: a equipe atravessa e sai junta,
+  como um robô só. O ciclo "líder segura a passagem → seguidores esperam
+  quem espera a passagem" não pode se formar.
+- **Sem ele:** o deadlock acima (intermitente: depende de dois líderes
+  chegarem à boca no mesmo ciclo). Com o código antigo, o cenário 11 travou
+  em 2 de 5 rodadas (0 e 1 de 8 caixas entregues; nas outras 3, as 8); com
+  a equipe em bloco, entrega as 8 sempre.
+- **Custo:** cada passo da equipe leva ~3 ciclos de 100 ms (o líder chega,
+  o seguidor reserva a célula, o líder vê a equipe junta e anda), contra 1
+  antes. O transporte do cenário 2 (equipe de 3) passou de ~8 s para
+  ~15 s. É o preço de nunca abrir buraco na equipe (ver a vazão em
+  docs/ESCALABILIDADE.md).
+
+#### Regra 2: robô ocioso não bloqueia
+- **Onde:** `navegacao.c: talvez_estacionar` / `parar_de_estacionar`;
+  `ocupacao.c: estacionamento` e `estacionamento_ocioso`; `gestor.c`
+  (`reservar_livre_perto` acha a posição padrão, que agora é estacionamento).
+- **Problema:** com 128 robôs, os ociosos (DISPONIVEL, sem tarefa) ficavam
+  parados em volta da posição padrão e das baias, cada um segurando uma
+  célula marcada. Os seguidores não conseguiam sair das baias e os líderes
+  já tinham ido na frente segurando passagens: **zero entregas** em 60 s.
+  Um robô parado no corredor é um recurso segurado para sempre por quem
+  não precisa dele.
+- **Como:** células de **estacionamento de ocioso** = as 4 zonas, as 2
+  estações e a posição padrão do Gestor (aceitam vários robôs, não são
+  marcadas). Um robô DISPONIVEL em modo automático, sem destino e sem
+  caminho, fora de uma delas, vai sozinho para a de menor caminho A*
+  (decisão da Navegação dele: descentralizado, o Organizador não sabe). Ele
+  continua DISPONIVEL e pode ser chamado no meio do caminho. O Gestor cria
+  todos os robôs novos na posição padrão (não espalhados em volta). As
+  **baias não** são estacionamento de ocioso: são só da equipe da caixa.
+  `MODO_MANUAL` no meio do caminho para de estacionar (o operador manda);
+  sem caminho para nenhum estacionamento o robô fica e só tenta de novo
+  com outro destino (para não repetir o A* a cada ciclo).
+- **Por que quebra a espera circular:** um robô ocioso não espera nada, mas
+  segurava uma célula da qual outros dependiam; com isso, uma cadeia de
+  espera podia terminar nele e nunca se desfazer (ele nunca sai). Agora
+  todo robô que segura uma célula marcada está andando para algum lugar
+  (ou em DEFEITO, que os outros contornam com o desvio de 8.4). Todo
+  recurso segurado é devolvido em tempo finito.
+- **Sem ele:** com N grande, o galpão fica coberto de robôs parados e
+  trava (zero entregas com N = 128).
 
 ### 8.5 Na tela
 - `atr/status`: cada robô tem `"bloqueado": true/false` (esperou célula ou
@@ -887,14 +992,16 @@ replanejamento ocasional do desvio (um A*, só quando trava).
    células; numa grade grande seria preciso um heap.
 
 **Equipes**
-8. Os seguidores perseguem a posição do líder lida do buffer de status
-   (atualizado a cada 200 ms) e andam 1–2 células atrás. Por isso o
-   Organizador espera **todos** na zona antes do `SOLTAR`.
+8. A equipe anda em bloco (8.6): o líder espera a equipe toda na célula
+   dele a cada passo, então o transporte é ~2× mais lento que um robô
+   sozinho. O Organizador continua esperando **todos** na zona antes do
+   `SOLTAR` (o buffer de status dos membros tem atraso).
 9. O líder é o mais perto da baia (7.4) e não muda durante o transporte.
-   Ele só libera uma passagem depois de ver cada membro dentro dela e depois
-   fora; um seguidor sempre passa pela mesma passagem que o líder (ele vai
-   atrás do líder), então isso sempre acontece.
-10. Uma carga por baia de cada vez.
+   Ele só libera uma passagem quando já saiu dela e a equipe está na célula
+   dele; numa célula de estacionamento ele não consegue contar a equipe na
+   grade e segue sem esperar (8.6).
+10. Uma carga por baia de cada vez (no máximo 4 entregas ao mesmo tempo: é o
+    que limita a vazão do galpão, ver docs/ESCALABILIDADE.md).
 11. Se um robô de uma equipe fica em DEFEITO para sempre, a equipe fica
     pausada para sempre (não há reatribuição da caixa).
 
@@ -924,7 +1031,7 @@ replanejamento ocasional do desvio (um A*, só quando trava).
 **Infraestrutura**
 20. `mq_send` bloqueia se a fila estiver cheia (10 mensagens): uma tarefa
     poderia esperar o Coletor ou a Navegação de um robô esvaziar a fila.
-21. Fila de pedidos de novo robô cheia (`MAX_PEDIDOS` = `MAX_ROBOS` = 64) → pedido recusado.
+21. Fila de pedidos de novo robô cheia (`MAX_PEDIDOS` = `MAX_ROBOS` = 128) → pedido recusado.
 22. Ctrl+C usa o comportamento padrão do `SIGINT` (mata tudo, sem limpeza);
     as sobras de IPC são removidas na próxima inicialização.
 23. `historico` lê o arquivo inteiro a cada pedido para pegar as últimas
@@ -957,7 +1064,17 @@ replanejamento ocasional do desvio (um A*, só quando trava).
     buffer (não até o robô parar fisicamente, que leva até mais 100 ms).
 31. Com `ATR_TEMPO_REAL=1` só as threads do sistema mudam de política; o
     Console e a thread de rede do MQTT continuam SCHED_OTHER.
-32. Com 64 robôs a Tela de Operação fica pesada (o benchmark roda sem ela).
+32. Com 128 robôs a Tela de Operação fica pesada (o benchmark roda sem ela).
+33. Vazão do benchmark: a janela de medição é estimada a partir do evento
+    "sistema iniciado" (+7 s = momento do `tempos zerar` no roteiro), e só
+    os últimos 40 s dos 60 s entram (os 20 s iniciais são aquecimento). Uma
+    semente (um mapa) e uma rodada por N.
+34. O tempo de entrega é medido da atribuição ("indo para a baia") ao
+    SOLTAR, pelos timestamps de quem enviou ao Coletor; não inclui o tempo
+    que a caixa esperou na fila antes de ganhar equipe.
+35. Robô ocioso vai para o estacionamento de MENOR caminho, sem olhar quantos
+    robôs já estão lá (o estacionamento aceita qualquer número; é uma
+    abstração: um galpão real teria vagas).
 
 ---
 
@@ -978,12 +1095,12 @@ mesma do vídeo), **1 e 2** no cenário 5 (que roda duas vezes:
 `cenario5_semente1` e `cenario5_semente2`) e **5** no cenário 6 (na semente
 42 a passagem de capacidade 1 fica sozinha numa parede, sem outra para o
 replanejamento escolher; na 5 ela divide a parede 1 com a P1) e **42** nos
-cenários 7 a 10.
+cenários 7 a 11.
 
 | Cenário | O que testa |
 |---|---|
 | 1 | 1 robô, caixa de tamanho 1: ciclo completo baia → zona pelo caminho A*, atravessando uma passagem de cada parede. |
-| 2 | 4 robôs, caixa de tamanho 3: escolha pelo menor caminho A* (o robô atrás da parede fica de fora), líder = o mais perto da baia (robô 1), `AGUARDANDO_EQUIPE`, `ACOPLAR` síncrono, só o líder usa passagens. |
+| 2 | 4 robôs nascendo em estacionamentos (estação atrás da parede 1, 2 na posição padrão, estação atrás de 2 paredes), caixa de tamanho 3: escolha pelo menor caminho A* (o robô atrás de 2 paredes fica de fora), líder = o mais perto da baia (robô 1), não o de menor id (0); `AGUARDANDO_EQUIPE`, `ACOPLAR` síncrono, equipe em bloco, só o líder usa passagens. |
 | 3 | Falha e bateria baixa no meio do transporte: `PAUSAR`/`CONTINUAR`, recarga só depois de soltar a carga, na estação de menor caminho. |
 | 4 | Caixa de tamanho 4 com 3 robôs: espera sem reservar ninguém, a fila para, o sistema continua respondendo; atendida quando o 4º robô é criado. Depois a fila anda: um 5º robô leva a caixa 2. |
 | 5 | Mesmo arquivo com sementes 1 e 2: o comando `mapa` mostra passagens (posição e capacidade) e obstáculos diferentes, e nos dois mapas o robô entrega a caixa da baia 2 na zona D. |
@@ -991,7 +1108,8 @@ cenários 7 a 10.
 | 7 | Bateria suficiente para a tarefa inteira: robôs longe da baia com 31%, 35% e 38% não são escolhidos para a caixa (tam 3, baia 1 → zona A), recebem `RECARREGAR` e só depois de recarregar formam a equipe; com 5 robôs e 12 caixas por ~3 min nenhum robô chega a 0% (o script avisa se houver DEFEITO). Com o código antigo o robô 2 chegava a 0% a caminho da baia. |
 | 8 | Anti-colisão, frente a frente: robôs 0 em (1,15) e 1 em (11,15), em manual, com `goto` em sentidos opostos na mesma linha. Nunca ocupam a mesma célula; o robô 1 (maior id) fica bloqueado e depois de 1 s "desviando de robo"; os dois chegam. O script confere o desvio, as 2 chegadas e zero `COLISAO`. |
 | 9 | Mão única na P1 (capacidade 4): robô 0 atravessa para a direita e robô 1 para a esquerda. Há vaga no semáforo, mas o robô 1 fica "esperando passagem P1 (cheia ou na contramao)" até o robô 0 sair; só então "entrou na passagem P1 (para a esquerda)". Ninguém trava, zero `COLISAO`. |
-| 10 | 6 robôs pedindo a mesma posição padrão (o Gestor põe cada um na célula livre mais próxima, BFS) e 6 caixas de tamanho 1 ao mesmo tempo: as 6 entregues, sem timeout e sem `COLISAO` (o script confere as duas coisas). |
+| 10 | 6 robôs pedindo a mesma posição padrão (estacionamento: os 6 nascem nela) e 6 caixas de tamanho 1 ao mesmo tempo: as 6 entregues, sem timeout e sem `COLISAO` (o script confere as duas coisas). |
+| 11 | O deadlock que o benchmark achou (8.6): 8 robôs, caixas 1–4 todas para a zona A, com as equipes cruzando P1 e P3 juntas. Com a equipe em bloco as 8 caixas são entregues e não há `COLISAO` (o script confere). Com o código antigo travou em 2 de 5 rodadas (8.6). |
 
 Os cenários usam `aguarda <id> <ESTADO> [timeout_s]` (espera o robô chegar a
 um estado, lendo o buffer de status a cada 100 ms) em vez de `espera` sempre

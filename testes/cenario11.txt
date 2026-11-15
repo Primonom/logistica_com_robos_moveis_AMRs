@@ -1,0 +1,37 @@
+# Cenário 11: o deadlock que o benchmark de escalabilidade encontrou
+# (semente 42, N = 8; mesmo roteiro do testes/escalabilidade.sh com N = 8).
+#  - 8 robôs na posição padrão e 8 caixas: as 4 primeiras (tamanhos 1 a
+#    4, baias 1 a 4) vão TODAS para a zona A, as 4 seguintes para a B;
+#  - as equipes das caixas 1, 2 e 3 saem quase juntas das baias e
+#    atravessam as MESMAS passagens (P1 e depois P3, para a direita).
+# Antes (equipe sem andar em bloco): o líder 3 entrou na P1 e a equipe 2
+# entrou logo atrás dele, ANTES dos seguidores dele. O líder 3 pegou a P3
+# e seguiu, mas só a devolveria quando os seguidores saíssem dela; os
+# seguidores estavam atrás da equipe 2, que esperava a P3: espera
+# circular, nenhuma entrega até o fim (ver docs/EXPLICACAO.md, "Equipe em
+# bloco e robô ocioso").
+# Esperado agora: as equipes andam em bloco (ninguém entra no meio), as 8
+# caixas são entregues (logs/cargas.csv com 8 linhas) e não há COLISAO
+# (o rodar_todos.sh confere as duas coisas).
+novo
+novo
+novo
+novo
+novo
+novo
+novo
+novo
+espera 5
+caixa 1 1 A
+caixa 2 2 A
+caixa 3 3 A
+caixa 4 4 A
+caixa 1 1 B
+caixa 2 2 B
+caixa 3 3 B
+caixa 4 4 B
+espera 2
+status
+espera 120
+status
+sair

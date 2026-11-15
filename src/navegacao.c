@@ -11,7 +11,8 @@
  *      Organizador porque alguém da equipe está em DEFEITO): só mantém o
  *      setpoint na posição atual;
  *   4) senão: se a Status pediu recarga, vai para a estação; se é SEGUIDOR
- *      num transporte, dá um passo em direção ao líder; senão calcula o
+ *      num transporte, dá um passo para a célula do líder; se está OCIOSO
+ *      fora de um estacionamento, vai para o mais próximo; senão calcula o
  *      caminho pendente (se houver) e segue o caminho.
  *
  * Caminho: calculado com A* (calcular_caminho, mapa.c) = lista de CÉLULAS.
@@ -56,8 +57,13 @@
  *   - robô em DEFEITO (ou pausado) continua segurando as suas células:
  *     fisicamente ele está ali; os outros desviam dele pelo mesmo mecanismo;
  *   - seguidores também usam a grade (entram livres nas células do próprio
- *     grupo). O desvio do seguidor nunca usa uma passagem (quem ocupa a
- *     vaga é o líder);
+ *     grupo). Como a equipe anda em bloco (abaixo), o seguidor só pisa na
+ *     célula do líder, que é do grupo: nunca fica bloqueado e não desvia;
+ *   - robô OCIOSO (DISPONIVEL, sem tarefa, sem caminho) fora de um
+ *     estacionamento de ocioso (zona, estação ou posição padrão; ver
+ *     ocupacao.c) vai sozinho para o de menor caminho A*. Continua
+ *     DISPONIVEL: o Organizador pode chamá-lo no meio do caminho. Assim um
+ *     robô parado nunca segura uma célula marcada no caminho dos outros;
  *   - no encerramento (SIGTERM) o robô não devolve as células: o sistema
  *     inteiro está terminando e a memória compartilhada será removida.
  *
@@ -70,9 +76,8 @@
  *     região de p, sai do monitor (sair_passagem: dentro-- e sem_post);
  *   - um robô nunca segura duas passagens: as regiões ficam separadas por
  *     mais de 1 célula (mapa.c), então ele sempre passa por uma célula
- *     livre (e libera p) antes de chegar à próxima. Se ainda segura p (a
- *     equipe não saiu), ele NÃO pede outra: espera. Isso quebra a
- *     condição "segura e espera" e evita deadlock;
+ *     fora delas (e libera p) antes de chegar à próxima. Se ainda segura p
+ *     (a equipe não chegou à célula dele), ele NÃO pede outra: espera;
  *   - esperando mais de 3 s na porta: recalcula o A* a partir de onde
  *     está. Com o custo dinâmico (passagem cheia ou na contramão custa
  *     mais) ele pode escolher outra passagem. Evento "replanejou rota:
@@ -80,12 +85,20 @@
  *   - o desvio de travamento DENTRO de uma passagem nunca volta para trás
  *     no túnel (respeita a mão única).
  *
- * Transporte em equipe: a equipe é uma unidade. Só o LÍDER calcula o
- * caminho até a zona e usa os semáforos. Cada SEGUIDOR calcula, a cada
- * ciclo, o A* até a posição atual do líder (buffer de status dele) e dá o
- * primeiro passo; não faz sem_wait/sem_post (a equipe ocupa 1 vaga). O
- * líder recebe a lista de membros no IR_ZONA e só devolve uma passagem
- * quando ele E todos os membros já saíram da região dela.
+ * Transporte em equipe — a EQUIPE ANDA EM BLOCO: só o LÍDER calcula o
+ * caminho até a zona e usa os semáforos (a equipe ocupa 1 vaga). O líder
+ * recebe o tamanho da equipe no IR_ZONA e só dá o próximo passo quando
+ * TODOS estão na célula dele: na GRADE (tempo real, não o buffer de
+ * status), n da célula do líder com o grupo da equipe == tamanho
+ * (equipe_junta). Cada SEGUIDOR dá um passo para a célula do líder (o
+ * campo celula_x/y do slot dele, que a Navegação do líder escreve ao
+ * chegar numa célula; o buffer de status tem até 200 ms de atraso). Um seguidor conta assim que RESERVA a
+ * célula do líder; ele ainda segura a anterior até chegar, então as
+ * células da equipe são sempre vizinhas, sem nenhuma célula livre entre
+ * o líder e os seguidores: nenhum robô de fora entra no meio da equipe.
+ * O mesmo teste diz quando devolver a passagem: o líder já está fora da
+ * região dela e a equipe está toda na célula dele (ver
+ * docs/EXPLICACAO.md, "Equipe em bloco e robô ocioso").
  *
  * Sincronização:
  *   - fila de mensagens /atr_robo_<id>: recebe comandos de outro processo
@@ -104,10 +117,12 @@
  *     lê a posição e escreve o setpoint nela no MESMO lock
  *     (parar_onde_esta): senão o simulador poderia mover o robô entre a
  *     leitura e a escrita, para uma célula que ele acabou de devolver.
- *   - mutex de OUTRO robô (líder, para o seguidor; membros, para o líder):
- *     lê só o buffer de status dele (e_posicao, destino). Nunca junto com o
- *     meu mutex: copia para variáveis locais e solta antes do próximo lock
- *     (regra anti-deadlock do projeto).
+ *   - mutex de OUTRO robô (o líder, para o seguidor): lê o destino do
+ *     buffer de status dele e a célula da grade (celula_x/y), nunca o hw. Nunca junto com o meu mutex: copia
+ *     para variáveis locais e solta antes do próximo lock (regra
+ *     anti-deadlock do projeto).
+ *   - equipe em bloco: robos_do_grupo (ocupacao.c) lê a grade com o mutex
+ *     dela, sozinho.
  *   - estado_local.mutex: troca de informação com a Status (outra thread):
  *     estado, destino e cantos do caminho (que a Status publica no
  *     buffer), as flags parar e ir_recarregar que a Status liga e a flag
@@ -145,14 +160,12 @@ static Estado estado_ao_chegar = DISPONIVEL; /* estado quando o caminho acabar *
 static bool acoplando = false;     /* mandou erguer; espera confirmação */
 static int  lider = -1;            /* >= 0: sou seguidor deste líder */
 static bool pausado = false;       /* PAUSAR do Organizador (equipe parada) */
-/* Só no líder durante o transporte: os outros membros da equipe e se cada
- * um já foi VISTO dentro da passagem que o líder segura.
- * POR QUE: o líder só faz sem_post quando a equipe inteira saiu; como o
- * buffer de status dos membros tem atraso, "fora" só vale depois de ter
- * sido visto "dentro" (senão um seguidor recém-entrado contaria como fora). */
-static int  n_membros = 0;
-static int  membros[TAMANHO_MAX_CAIXA];
-static bool visto_dentro[TAMANHO_MAX_CAIXA];
+/* Tamanho da equipe que eu lidero (1 = sozinho). POR QUE: o líder só
+ * anda quando os "tamanho_equipe" robôs estão na célula dele (equipe em
+ * bloco, ver o topo); a contagem vem da grade, que é em tempo real. */
+static int  tamanho_equipe = 1;
+static bool estacionando = false;  /* ocioso indo para o estacionamento */
+static bool sem_estacionamento = false; /* ocioso sem caminho até nenhum estacionamento */
 /* Anti-colisão (só esta thread usa; a grade e o monitor ficam em
  * ocupacao.c). */
 static int  meu_grupo;               /* id do robô ou GRUPO_EQUIPE + carga */
@@ -290,6 +303,16 @@ static void definir_grupo(int grupo)
     pthread_mutex_unlock(&mem->robos[id_robo].mutex);
 }
 
+/* Publica no meu slot a célula da grade onde estou (os seguidores da
+ * minha equipe dão o passo para ela; ver o topo). */
+static void publicar_celula(void)
+{
+    pthread_mutex_lock(&mem->robos[id_robo].mutex);
+    mem->robos[id_robo].celula_x = cel_x;
+    mem->robos[id_robo].celula_y = cel_y;
+    pthread_mutex_unlock(&mem->robos[id_robo].mutex);
+}
+
 /* Passo 2 do protocolo (início de cada ciclo): se o simulador já levou o
  * robô para a célula reservada, devolve a anterior. */
 static void confirmar_chegada(void)
@@ -304,6 +327,7 @@ static void confirmar_chegada(void)
         cel_x = x;
         cel_y = y;
         reservou = false;
+        publicar_celula();
     }
 }
 
@@ -320,6 +344,7 @@ static bool cancelar_reserva(void)
         liberar_celula(cel_x, cel_y);
         cel_x = x;
         cel_y = y;
+        publicar_celula();
         return true;
     }
     liberar_celula(res_x, res_y);
@@ -374,19 +399,13 @@ static bool hora_de_desviar(void)
     return true;
 }
 
-/* Posição de outro robô, pelo BUFFER DE STATUS dele (nunca o hw). */
-static void posicao_de(int id, int *x, int *y)
-{
-    pthread_mutex_lock(&mem->robos[id].mutex);
-    *x = mem->robos[id].e_posicao_x;
-    *y = mem->robos[id].e_posicao_y;
-    pthread_mutex_unlock(&mem->robos[id].mutex);
-}
-
-/* Guarda um destino; o caminho é calculado em calcular_pendente(). */
+/* Guarda um destino; o caminho é calculado em calcular_pendente(). Um
+ * destino novo (tarefa, recarga, goto) substitui o de estacionar. */
 static void novo_destino(int x, int y, Estado durante, Estado ao_chegar)
 {
     tem_destino = true;
+    estacionando = false;
+    sem_estacionamento = false;
     destino_x = x;
     destino_y = y;
     estado_ao_chegar = ao_chegar;
@@ -400,17 +419,6 @@ static void evento(const char *formato, int valor)
 
     snprintf(texto, sizeof(texto), formato, valor);
     registrar_evento(fila_coletor, id_robo, texto);
-}
-
-/* IR_ZONA para o líder: guarda os OUTROS membros da equipe. */
-static void guardar_membros(const MensagemRobo *m)
-{
-    int k;
-
-    n_membros = 0;
-    for (k = 0; k < m->n_membros; k++)
-        if (m->membros[k] != id_robo)
-            membros[n_membros++] = m->membros[k];
 }
 
 /* RECARREGAR do Organizador: a bateria não basta para a caixa da vez.
@@ -427,6 +435,65 @@ static void ir_recarregar_agora(void)
                      "bateria insuficiente para a tarefa: indo recarregar");
 }
 
+/* 4) Robô ocioso (DISPONIVEL, sem destino nem caminho) fora de um
+ * estacionamento de ocioso: vai para o de menor caminho A* (as 4 zonas,
+ * as 2 estações e a posição padrão), continuando DISPONIVEL. Decisão só
+ * deste robô (descentralizada). Sem caminho para nenhum: fica (e não
+ * tenta de novo até receber outro destino, para não repetir o A* a cada
+ * ciclo). */
+static void talvez_estacionar(void)
+{
+    int x, y, i, passos, melhor = -1, ex = 0, ey = 0;
+    int px[N_ZONAS + N_ESTACOES + 1], py[N_ZONAS + N_ESTACOES + 1];
+
+    if (estacionando || sem_estacionamento || tem_destino || indice < caminho.n ||
+        acoplando || ler_estado() != DISPONIVEL)
+        return;
+    ler_posicao(&x, &y);
+    if (estacionamento_ocioso(x, y))
+        return;
+    for (i = 0; i < N_ZONAS; i++) {
+        px[i] = ZONA_X[i];
+        py[i] = ZONA_Y[i];
+    }
+    for (i = 0; i < N_ESTACOES; i++) {
+        px[N_ZONAS + i] = ESTACAO_X[i];
+        py[N_ZONAS + i] = ESTACAO_Y[i];
+    }
+    px[N_ZONAS + N_ESTACOES] = POS_PADRAO_X;
+    py[N_ZONAS + N_ESTACOES] = POS_PADRAO_Y;
+    for (i = 0; i < N_ZONAS + N_ESTACOES + 1; i++) {
+        passos = passos_caminho(x, y, px[i], py[i]);
+        if (passos >= 0 && (melhor < 0 || passos < melhor)) {
+            melhor = passos;
+            ex = px[i];
+            ey = py[i];
+        }
+    }
+    if (melhor < 0) {
+        sem_estacionamento = true;
+        return;
+    }
+    novo_destino(ex, ey, DISPONIVEL, DISPONIVEL);
+    estacionando = true;   /* depois do novo_destino, que zera a flag */
+    registrar_evento(fila_coletor, id_robo, "ocioso: indo para o estacionamento");
+}
+
+/* MODO_MANUAL no meio do caminho para o estacionamento: para onde está
+ * (se estiver numa passagem, termina o caminho para sair dela; o GOTO que
+ * vier depois é calculado ao sair, como sempre). */
+static void parar_de_estacionar(void)
+{
+    estacionando = false;
+    tem_destino = false;
+    if (passagem_atual != -1)
+        return;
+    caminho.n = 0;
+    indice = 0;
+    publicar_destino(-1, -1);
+    publicar_rota();
+}
+
 /* Trata uma mensagem recebida. */
 static void tratar_mensagem(const MensagemRobo *m)
 {
@@ -441,6 +508,8 @@ static void tratar_mensagem(const MensagemRobo *m)
         break;
     case MODO_MANUAL:
         if (e == DISPONIVEL) {
+            if (estacionando)
+                parar_de_estacionar();   /* o operador manda agora */
             definir_modo(false);
             definir_estado(MANUAL);
             registrar_evento(fila_coletor, id_robo, "modo manual");
@@ -480,7 +549,7 @@ static void tratar_mensagem(const MensagemRobo *m)
          * O robô está na baia (estacionamento, não marcada na grade). */
         definir_grupo(m->n_membros > 1 ? GRUPO_EQUIPE + m->carga_id : id_robo);
         if (m->lider_id == id_robo) {
-            guardar_membros(m);
+            tamanho_equipe = m->n_membros;
             novo_destino(m->x, m->y, OPERANDO_CARGA, OPERANDO_CARGA);
         } else {
             lider = m->lider_id;
@@ -500,7 +569,7 @@ static void tratar_mensagem(const MensagemRobo *m)
         definir_grupo(id_robo);   /* na zona (estacionamento): volta a ser sozinho */
         pausado = false;
         lider = -1;
-        n_membros = 0;
+        tamanho_equipe = 1;
         caminho.n = 0;
         indice = 0;
         tem_destino = false;
@@ -549,33 +618,23 @@ static void verificar_acoplamento(void)
     }
 }
 
-/* Desvio do seguidor: proíbe as células de outros grupos e TODAS as
- * passagens (quem ocupa a vaga é o líder; se o líder já está do outro
- * lado, o seguidor espera). */
-static void proibir_passagens(bool proibida[])
-{
-    int x, y;
-
-    for (y = 0; y < MAPA_ALTURA; y++)
-        for (x = 0; x < MAPA_LARGURA; x++)
-            if (dentro_de_passagem(x, y))
-                proibida[y * MAPA_LARGURA + x] = true;
-}
-
-/* 4a) Seguidor: A* da minha posição até a posição ATUAL do líder (lida do
- * buffer de status dele) e um passo só, para a 1ª célula do caminho
- * (pela grade, como todo robô). Não usa o monitor nem o semáforo: quem
- * ocupa a vaga na passagem é o líder. O destino publicado é o do líder (a
- * equipe vai para o mesmo lugar). */
+/* 4a) Seguidor: A* da minha posição até a célula ATUAL do líder (o campo
+ * celula_x/y que a Navegação dele publica no slot; o destino vem do
+ * buffer de status) e um passo só, para a 1ª célula do caminho
+ * (pela grade, como todo robô). Como a equipe anda em bloco, o líder está
+ * na célula vizinha (ou na minha) e o passo é para a célula dele, que é
+ * do meu grupo: a reserva nunca falha, então o seguidor não precisa de
+ * desvio. Não usa o monitor nem o semáforo: quem ocupa a vaga na passagem
+ * é o líder. O destino publicado é o do líder (a equipe vai para o mesmo
+ * lugar). */
 static void seguir_lider(void)
 {
     Caminho c;
-    bool proibida[N_CELULAS];
     int lx, ly, dx, dy, x, y;
 
     pthread_mutex_lock(&mem->robos[lider].mutex);
-    lx = mem->robos[lider].e_posicao_x;
-    ly = mem->robos[lider].e_posicao_y;
+    lx = mem->robos[lider].celula_x;
+    ly = mem->robos[lider].celula_y;
     dx = mem->robos[lider].destino_x;
     dy = mem->robos[lider].destino_y;
     pthread_mutex_unlock(&mem->robos[lider].mutex);
@@ -586,15 +645,7 @@ static void seguir_lider(void)
         dar_passo(x, y);   /* já está com o líder (ou sem caminho): fica */
         return;
     }
-    if (dar_passo(c.x[1], c.y[1]) || !hora_de_desviar())
-        return;
-    /* Travado: um passo pelo caminho que evita os outros robôs. */
-    copiar_ocupadas(meu_grupo, proibida);
-    proibir_passagens(proibida);
-    proibida[ly * MAPA_LARGURA + lx] = false;
-    if (calcular_caminho_evitando(x, y, lx, ly, proibida, &c) && c.n >= 2 &&
-        dar_passo(c.x[1], c.y[1]))
-        registrar_evento(fila_coletor, id_robo, "desviando de robo");
+    dar_passo(c.x[1], c.y[1]);
 }
 
 /* Calcula o caminho de (x, y) até o destino atual. caminho.x[0] é a
@@ -626,25 +677,19 @@ static void calcular_pendente(void)
     planejar(x, y);
 }
 
-/* Todos os membros da equipe já saíram da passagem p? Um membro só conta
- * como "saiu" depois de ter sido VISTO dentro dela: o buffer de status tem
- * até 200 ms de atraso, e um seguidor que acabou de entrar ainda pode
- * aparecer do lado de fora (antes da boca). Um mutex por vez. */
-static bool equipe_saiu(int p)
+/* A equipe inteira está na minha célula? Pela GRADE (tempo real): n da
+ * minha célula com o meu grupo == tamanho da equipe. Um seguidor conta
+ * quando RESERVA a célula (ele chega nela no ciclo seguinte e até lá
+ * segura a anterior, vizinha: não sobra célula livre entre nós).
+ * Numa célula de estacionamento (não marcada) não dá para contar: ali o
+ * líder segue, porque o estacionamento aceita qualquer robô e não há
+ * "meio da equipe" que alguém possa ocupar; ele espera na próxima célula
+ * (marcada). Sozinho (tamanho 1) é sempre true. */
+static bool equipe_junta(void)
 {
-    int k, x, y;
-    bool saiu = true;
-
-    for (k = 0; k < n_membros; k++) {
-        posicao_de(membros[k], &x, &y);
-        if (passagem_em(x, y) == p) {
-            visto_dentro[k] = true;
-            saiu = false;
-        } else if (!visto_dentro[k]) {
-            saiu = false;   /* ainda não entrou */
-        }
-    }
-    return saiu;
+    if (tamanho_equipe == 1 || estacionamento(cel_x, cel_y))
+        return true;
+    return robos_do_grupo(cel_x, cel_y, meu_grupo) == tamanho_equipe;
 }
 
 /* Sai do monitor da passagem que estou segurando. */
@@ -655,10 +700,11 @@ static void soltar_passagem(void)
     passagem_atual = -1;
 }
 
-/* Devolve a passagem quando eu (em (x, y)) e a equipe já saímos dela.
- * "Saiu" só vale depois de ter estado DENTRO: entre pegar a passagem e
- * entrar o robô pode ficar uns ciclos parado na porta (esperando a boca
- * na grade), e isso não é "ter saído". */
+/* Devolve a passagem quando eu (em (x, y)) já saí da região dela e a
+ * equipe está toda na minha célula (fora da região também). "Saiu" só
+ * vale depois de ter estado DENTRO: entre pegar a passagem e entrar o
+ * robô pode ficar uns ciclos parado na porta (esperando a boca na grade),
+ * e isso não é "ter saído". */
 static void liberar_se_saiu(int x, int y)
 {
     int p = passagem_atual;
@@ -669,7 +715,7 @@ static void liberar_se_saiu(int x, int y)
         entrou_na_passagem = true;
         return;
     }
-    if (entrou_na_passagem && equipe_saiu(p))
+    if (entrou_na_passagem && equipe_junta())
         soltar_passagem();
 }
 
@@ -678,7 +724,6 @@ static void liberar_se_saiu(int x, int y)
 static bool tentar_entrar(int p, int sentido)
 {
     char texto[128];
-    int k;
 
     if (!entrar_passagem(p, sentido)) {
         bloqueado = true;
@@ -693,8 +738,6 @@ static bool tentar_entrar(int p, int sentido)
     entrou_na_passagem = false;
     sentido_atual = sentido;
     avisou_espera = false;
-    for (k = 0; k < n_membros; k++)
-        visto_dentro[k] = false;
     snprintf(texto, sizeof(texto), "entrou na passagem P%d (para a %s)", p + 1,
              sentido == 0 ? "direita" : "esquerda");
     registrar_evento(fila_coletor, id_robo, texto);
@@ -775,10 +818,18 @@ static void seguir_caminho(void)
         publicar_rota();              /* uma célula a menos */
         if (indice == caminho.n) {
             publicar_destino(-1, -1);
+            estacionando = false;
             definir_estado(estado_ao_chegar);
             registrar_evento(fila_coletor, id_robo, "chegou ao destino");
             return;
         }
+    }
+
+    /* Equipe em bloco: parado na minha célula (sem reserva pendente), só
+     * dou o próximo passo com a equipe toda aqui. */
+    if (!reservou && !equipe_junta()) {
+        dar_passo(cel_x, cel_y);
+        return;
     }
 
     /* A próxima célula é de uma passagem que ainda não seguro? */
@@ -877,6 +928,7 @@ void *tarefa_navegacao(void *arg)
             if (lider >= 0) {
                 seguir_lider();
             } else {
+                talvez_estacionar();
                 calcular_pendente();
                 seguir_caminho();
             }
