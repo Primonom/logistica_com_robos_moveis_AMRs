@@ -146,9 +146,13 @@
 #define DESVIAR_MAIOR_APOS  10  /* ciclos bloqueado pela grade (maior grupo) */
 #define DESVIAR_MENOR_APOS  30  /* ... (menor grupo: espera o outro desviar) */
 
-static mqd_t fila;                      /* /atr_robo_<id> (só leitura) */
-
 /* Variáveis usadas só por esta thread (não precisam de mutex). */
+static mqd_t fila;                 /* /atr_robo_<id> (só leitura) */
+/* Caixa da tarefa atual, só para o texto dos eventos (histórico do robô:
+ * "pegou a caixa 5 na Baia 3", "entregou a caixa 5 na Zona A"). */
+static int  minha_caixa = -1;
+static int  minha_baia = 0;        /* 1..4 */
+static char minha_zona = '?';      /* 'A'..'D' */
 static Caminho caminho;
 static int  indice = 0;            /* próxima célula do caminho (caminho.n = sem caminho) */
 static int  passagem_atual = -1;   /* passagem que estou segurando */
@@ -421,6 +425,18 @@ static void evento(const char *formato, int valor)
     registrar_evento(fila_coletor, id_robo, texto);
 }
 
+/* Índice (0..n-1) do ponto (x, y) na lista px/py (baias ou zonas, mapa.h),
+ * ou -1 se não é nenhum. Só para escrever "Baia 3" / "Zona A" nos eventos. */
+static int indice_do_ponto(int x, int y, const int px[], const int py[], int n)
+{
+    int i;
+
+    for (i = 0; i < n; i++)
+        if (x == px[i] && y == py[i])
+            return i;
+    return -1;
+}
+
 /* RECARREGAR do Organizador: a bateria não basta para a caixa da vez.
  * Vai para a estação de menor caminho (a Status volta a DISPONIVEL quando
  * chegar a 100%, igual à recarga que ela mesma pede). */
@@ -498,6 +514,7 @@ static void parar_de_estacionar(void)
 static void tratar_mensagem(const MensagemRobo *m)
 {
     Estado e = ler_estado();
+    char texto[128];
 
     switch (m->tipo) {
     case GOTO:
@@ -533,7 +550,11 @@ static void tratar_mensagem(const MensagemRobo *m)
         pthread_mutex_lock(&estado_local.mutex);
         estado_local.ir_recarregar = false;
         pthread_mutex_unlock(&estado_local.mutex);
-        evento("tarefa: ir para a baia (caixa %d)", m->carga_id);
+        minha_caixa = m->carga_id;
+        minha_baia = indice_do_ponto(m->x, m->y, BAIA_X, BAIA_Y, N_BAIAS) + 1;
+        snprintf(texto, sizeof(texto), "tarefa: ir para a Baia %d buscar a caixa %d",
+                 minha_baia, minha_caixa);
+        registrar_evento(fila_coletor, id_robo, texto);
         novo_destino(m->x, m->y, DESLOCANDO, AGUARDANDO_EQUIPE);
         break;
     case RECARREGAR:
@@ -548,6 +569,7 @@ static void tratar_mensagem(const MensagemRobo *m)
         /* A equipe vira um grupo só (entra nas células uns dos outros).
          * O robô está na baia (estacionamento, não marcada na grade). */
         definir_grupo(m->n_membros > 1 ? GRUPO_EQUIPE + m->carga_id : id_robo);
+        minha_zona = (char)('A' + indice_do_ponto(m->x, m->y, ZONA_X, ZONA_Y, N_ZONAS));
         if (m->lider_id == id_robo) {
             tamanho_equipe = m->n_membros;
             novo_destino(m->x, m->y, OPERANDO_CARGA, OPERANDO_CARGA);
@@ -576,7 +598,10 @@ static void tratar_mensagem(const MensagemRobo *m)
         publicar_destino(-1, -1);
         publicar_rota();          /* caminho.n = 0: rota vazia */
         definir_estado(DISPONIVEL);
-        registrar_evento(fila_coletor, id_robo, "carga solta");
+        snprintf(texto, sizeof(texto), "carga solta: entregou a caixa %d na Zona %c",
+                 minha_caixa, minha_zona);
+        registrar_evento(fila_coletor, id_robo, texto);
+        minha_caixa = -1;
         break;
     }
 }
@@ -605,6 +630,7 @@ static void ler_mensagens(void)
 static void verificar_acoplamento(void)
 {
     bool atracada;
+    char texto[128];
 
     if (!acoplando)
         return;
@@ -614,7 +640,9 @@ static void verificar_acoplamento(void)
     if (atracada) {
         acoplando = false;
         definir_estado(OPERANDO_CARGA);
-        registrar_evento(fila_coletor, id_robo, "carga erguida");
+        snprintf(texto, sizeof(texto), "carga erguida: pegou a caixa %d na Baia %d",
+                 minha_caixa, minha_baia);
+        registrar_evento(fila_coletor, id_robo, texto);
     }
 }
 
@@ -820,7 +848,10 @@ static void seguir_caminho(void)
             publicar_destino(-1, -1);
             estacionando = false;
             definir_estado(estado_ao_chegar);
-            registrar_evento(fila_coletor, id_robo, "chegou ao destino");
+            if (estado_ao_chegar == RECARREGANDO)
+                registrar_evento(fila_coletor, id_robo, "em recarga na estacao");
+            else
+                registrar_evento(fila_coletor, id_robo, "chegou ao destino");
             return;
         }
     }

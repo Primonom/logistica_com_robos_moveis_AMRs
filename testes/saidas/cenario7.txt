@@ -4,25 +4,25 @@ Mapa gerado com semente 42
   P3: parede 2, y = 13, x 27..32, capacidade 1
   P4: parede 3, y = 24, x 42..47, capacidade 3
 Ponte MQTT: conectada ao broker localhost:1883
-Gestor: robo 0 criado (pid 27108) em (5,15)
-Organizador: 1 robo(s) novo(s) na frota
-Gestor: robo 1 criado (pid 27109) em (6,15)
-Gestor: robo 2 criado (pid 27110) em (50,15)
-Gestor: robo 3 criado (pid 27111) em (52,15)
-Robo 0 vivo (pid 27108)
-Robo 1 vivo (pid 27109)
-Gestor: robo 4 criado (pid 27112) em (54,15)
-Robo 2 vivo (pid 27110)
-Robo 3 vivo (pid 27111)
-Robo 4 vivo (pid 27112)
+Gestor: robo 0 criado (pid 12268) em (5,15)
+Gestor: robo 1 criado (pid 12269) em (6,15)
+Organizador: 2 robo(s) novo(s) na frota
+Gestor: robo 2 criado (pid 12270) em (50,15)
+Robo 0 vivo (pid 12268)
+Gestor: robo 3 criado (pid 12271) em (52,15)
+Robo 1 vivo (pid 12269)
+Robo 2 vivo (pid 12270)
+Gestor: robo 4 criado (pid 12274) em (54,15)
+Robo 3 vivo (pid 12271)
+Robo 4 vivo (pid 12274)
 Console: robo 4 em DISPONIVEL
-Organizador: 4 robo(s) novo(s) na frota
+Organizador: 3 robo(s) novo(s) na frota
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   27108   DISPONIVEL         ( 8,15)  ( 8,15)  100%     3  auto  -1
-1   27109   DISPONIVEL         ( 8,15)  ( 8,15)  100%     2  auto  -1
-2   27110   DISPONIVEL         (56,17)  (56,18)   30%     8  auto  -1
-3   27111   DISPONIVEL         (56,18)  (56,18)   34%     7  auto  -1
-4   27112   DISPONIVEL         (56,18)  (56,18)   37%     5  auto  -1
+0   12268   DISPONIVEL         ( 8,15)  ( 8,15)  100%     3  auto  -1
+1   12269   DISPONIVEL         ( 8,15)  ( 8,15)  100%     2  auto  -1
+2   12270   DISPONIVEL         (56,17)  (56,18)   30%     8  auto  -1
+3   12271   DISPONIVEL         (56,18)  (56,18)   34%     7  auto  -1
+4   12274   DISPONIVEL         (56,18)  (56,18)   37%     5  auto  -1
 caixas entregues: 0
 Organizador: robo 2 sem bateria para a caixa 1: RECARREGAR
 Organizador: robo 3 sem bateria para a caixa 1: RECARREGAR
@@ -32,11 +32,11 @@ Console: robo 2 em RECARREGANDO
 Console: robo 3 em RECARREGANDO
 Console: robo 4 em RECARREGANDO
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   27108   DISPONIVEL         ( 8,15)  ( 8,15)  100%     3  auto  -1
-1   27109   DISPONIVEL         ( 8,15)  ( 8,15)  100%     2  auto  -1
-2   27110   RECARREGANDO       (55,18)  (54,18)   29%    10  auto  -1
-3   27111   RECARREGANDO       (56,18)  (56,18)   34%     7  auto  -1
-4   27112   RECARREGANDO       (56,18)  (56,18)   37%     5  auto  -1
+0   12268   DISPONIVEL         ( 8,15)  ( 8,15)  100%     3  auto  -1
+1   12269   DISPONIVEL         ( 8,15)  ( 8,15)  100%     2  auto  -1
+2   12270   RECARREGANDO       (54,18)  (53,18)   29%    11  auto  -1
+3   12271   RECARREGANDO       (56,18)  (55,18)   34%     7  auto  -1
+4   12274   RECARREGANDO       (56,18)  (56,18)   37%     5  auto  -1
 caixa 1   tam 3  baia 1 -> zona A  esperando
 caixas entregues: 0
 Console: robo 2 em DISPONIVEL
@@ -64,54 +64,54 @@ Organizador: robo 2 sem bateria para a caixa 5: RECARREGAR
 Organizador: caixa 3 entregue na zona B (robos 4 0 1)
 Organizador: robo 0 sem bateria para a caixa 5: RECARREGAR
 Organizador: robo 1 sem bateria para a caixa 5: RECARREGAR
-Organizador: caixa 5 (tam 4, baia 1 -> zona A): robos 0 1 2 3 indo para a baia
-Organizador: caixa 6 (tam 2) aguardando equipe: 1 robo(s) livre(s)
+Organizador: caixa 5 (tam 4, baia 1 -> zona A): robos 0 2 3 4 indo para a baia
+Organizador: caixa 6 (tam 2) aguardando equipe: 0 robo(s) livre(s)
 Organizador: caixa 5: equipe completa na baia, ACOPLAR
 Organizador: caixa 5: erguida por todos, IR_ZONA A (lider 0)
-Organizador: caixa 5 entregue na zona A (robos 0 1 2 3)
-Organizador: caixa 6 (tam 2, baia 2 -> zona B): robos 4 0 indo para a baia
-Organizador: caixa 7 (tam 1, baia 3 -> zona D): robos 1 indo para a baia
-Organizador: caixa 9 (tam 1, baia 4 -> zona A): robos 2 indo para a baia
-Organizador: robo 3 sem bateria para a caixa 10: RECARREGAR
+Organizador: caixa 5 entregue na zona A (robos 0 2 3 4)
+Organizador: caixa 6 (tam 2, baia 2 -> zona B): robos 1 0 indo para a baia
+Organizador: caixa 7 (tam 1, baia 3 -> zona D): robos 2 indo para a baia
+Organizador: robo 3 sem bateria para a caixa 9: RECARREGAR
+Organizador: robo 4 sem bateria para a caixa 9: RECARREGAR
+Organizador: caixa 9 (tam 1) aguardando equipe: 0 robo(s) livre(s)
+Organizador: caixa 9 (tam 1, baia 4 -> zona A): robos 3 indo para a baia
 Organizador: caixa 10 (tam 2) aguardando equipe: 0 robo(s) livre(s)
 Organizador: caixa 6: equipe completa na baia, ACOPLAR
-Organizador: caixa 6: erguida por todos, IR_ZONA B (lider 4)
+Organizador: caixa 6: erguida por todos, IR_ZONA B (lider 1)
 Organizador: caixa 7: equipe completa na baia, ACOPLAR
-Organizador: caixa 7: erguida por todos, IR_ZONA D (lider 1)
+Organizador: caixa 7: erguida por todos, IR_ZONA D (lider 2)
 Organizador: caixa 9: equipe completa na baia, ACOPLAR
-Organizador: caixa 9: erguida por todos, IR_ZONA A (lider 2)
-Organizador: caixa 7 entregue na zona D (robos 1)
-Organizador: robo 1 sem bateria para a caixa 10: RECARREGAR
-Organizador: caixa 10 (tam 2, baia 1 -> zona D): robos 1 3 indo para a baia
+Organizador: caixa 9: erguida por todos, IR_ZONA A (lider 3)
+Organizador: caixa 7 entregue na zona D (robos 2)
+Organizador: robo 2 sem bateria para a caixa 10: RECARREGAR
+Organizador: caixa 10 (tam 2, baia 1 -> zona D): robos 2 4 indo para a baia
 Organizador: caixa 11 (tam 1) aguardando equipe: 0 robo(s) livre(s)
-Organizador: caixa 6 entregue na zona B (robos 4 0)
-Organizador: caixa 9 entregue na zona A (robos 2)
-Organizador: caixa 8 (tam 3) aguardando equipe: 0 robo(s) livre(s)
+Organizador: caixa 6 entregue na zona B (robos 1 0)
+Organizador: caixa 9 entregue na zona A (robos 3)
 Organizador: robo 0 sem bateria para a caixa 8: RECARREGAR
-Organizador: robo 2 sem bateria para a caixa 8: RECARREGAR
-Organizador: robo 4 sem bateria para a caixa 8: RECARREGAR
+Organizador: caixa 8 (tam 3) aguardando equipe: 0 robo(s) livre(s)
 Organizador: caixa 10: equipe completa na baia, ACOPLAR
-Organizador: caixa 10: erguida por todos, IR_ZONA D (lider 1)
-Organizador: caixa 8 (tam 3, baia 2 -> zona C): robos 0 2 4 indo para a baia
+Organizador: caixa 10: erguida por todos, IR_ZONA D (lider 2)
+Organizador: caixa 8 (tam 3, baia 2 -> zona C): robos 0 1 3 indo para a baia
 Organizador: caixa 11 (tam 1) aguardando equipe: 0 robo(s) livre(s)
 Organizador: caixa 8: equipe completa na baia, ACOPLAR
 Organizador: caixa 8: erguida por todos, IR_ZONA C (lider 0)
-Organizador: caixa 10 entregue na zona D (robos 1 3)
-Organizador: caixa 11 (tam 1, baia 3 -> zona B): robos 1 indo para a baia
+Organizador: caixa 10 entregue na zona D (robos 2 4)
+Organizador: caixa 11 (tam 1, baia 3 -> zona B): robos 2 indo para a baia
 Organizador: caixa 12 (tam 2) aguardando equipe: 1 robo(s) livre(s)
+Organizador: caixa 8 entregue na zona C (robos 0 1 3)
 Organizador: caixa 11: equipe completa na baia, ACOPLAR
-Organizador: caixa 11: erguida por todos, IR_ZONA B (lider 1)
-Organizador: caixa 8 entregue na zona C (robos 0 2 4)
-Organizador: caixa 12 (tam 2, baia 4 -> zona C): robos 3 0 indo para a baia
-Organizador: caixa 11 entregue na zona B (robos 1)
+Organizador: caixa 11: erguida por todos, IR_ZONA B (lider 2)
+Organizador: caixa 12 (tam 2, baia 4 -> zona C): robos 4 0 indo para a baia
+Organizador: caixa 11 entregue na zona B (robos 2)
 Organizador: caixa 12: equipe completa na baia, ACOPLAR
-Organizador: caixa 12: erguida por todos, IR_ZONA C (lider 3)
+Organizador: caixa 12: erguida por todos, IR_ZONA C (lider 4)
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   27108   OPERANDO_CARGA     (31,13)  (31,13)   51%   944  auto  12
-1   27109   DISPONIVEL         (56,11)  (56,11)   41%   976  auto  -1
-2   27110   DISPONIVEL         (56,18)  (56,18)   74%   891  auto  -1
-3   27111   OPERANDO_CARGA     (32,13)  (32,13)   49%   650  auto  12
-4   27112   DISPONIVEL         (56,18)  (56,18)   75%   509  auto  -1
+0   12268   OPERANDO_CARGA     (22,19)  (23,19)   54%   929  auto  12
+1   12269   DISPONIVEL         (56,18)  (56,18)   42%   623  auto  -1
+2   12270   DISPONIVEL         (56,11)  (56,11)   40%  1020  auto  -1
+3   12271   DISPONIVEL         (56,18)  (56,18)   36%   715  auto  -1
+4   12274   OPERANDO_CARGA     (23,19)  (23,19)   52%   653  auto  12
 caixa 12  tam 2  baia 4 -> zona C  em andamento
 caixas entregues: 11
 Encerrando...

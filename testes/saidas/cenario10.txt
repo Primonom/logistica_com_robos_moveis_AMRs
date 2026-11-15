@@ -4,27 +4,27 @@ Mapa gerado com semente 42
   P3: parede 2, y = 13, x 27..32, capacidade 1
   P4: parede 3, y = 24, x 42..47, capacidade 3
 Ponte MQTT: conectada ao broker localhost:1883
-Gestor: robo 0 criado (pid 27369) em (8,15)
-Gestor: robo 1 criado (pid 27370) em (8,15)
+Gestor: robo 0 criado (pid 12601) em (8,15)
+Gestor: robo 1 criado (pid 12602) em (8,15)
 Organizador: 2 robo(s) novo(s) na frota
-Gestor: robo 2 criado (pid 27371) em (8,15)
-Robo 0 vivo (pid 27369)
-Robo 1 vivo (pid 27370)
-Gestor: robo 3 criado (pid 27372) em (8,15)
-Robo 2 vivo (pid 27371)
-Gestor: robo 4 criado (pid 27377) em (8,15)
-Robo 3 vivo (pid 27372)
-Gestor: robo 5 criado (pid 27380) em (8,15)
-Robo 4 vivo (pid 27377)
-Robo 5 vivo (pid 27380)
+Gestor: robo 2 criado (pid 12603) em (8,15)
+Gestor: robo 3 criado (pid 12604) em (8,15)
+Robo 0 vivo (pid 12601)
+Robo 1 vivo (pid 12602)
+Gestor: robo 4 criado (pid 12605) em (8,15)
+Robo 2 vivo (pid 12603)
+Robo 3 vivo (pid 12604)
+Gestor: robo 5 criado (pid 12610) em (8,15)
+Robo 4 vivo (pid 12605)
+Robo 5 vivo (pid 12610)
 Console: robo 5 em DISPONIVEL
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   27369   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
-1   27370   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
-2   27371   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
-3   27372   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
-4   27377   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
-5   27380   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
+0   12601   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
+1   12602   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
+2   12603   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
+3   12604   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
+4   12605   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
+5   12610   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
 caixas entregues: 0
 Organizador: 4 robo(s) novo(s) na frota
 Organizador: caixa 1 (tam 1, baia 1 -> zona D): robos 0 indo para a baia
@@ -34,12 +34,12 @@ Organizador: caixa 4 (tam 1, baia 4 -> zona A): robos 3 indo para a baia
 Organizador: caixa 2: equipe completa na baia, ACOPLAR
 Organizador: caixa 3: equipe completa na baia, ACOPLAR
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   27369   DESLOCANDO         ( 4, 4)  ( 4, 4)   97%    15  auto  1
-1   27370   AGUARDANDO_EQUIPE  ( 3,11)  ( 3,11)   99%     9  auto  2
-2   27371   AGUARDANDO_EQUIPE  ( 3,18)  ( 3,18)   99%     8  auto  3
-3   27372   DESLOCANDO         ( 3,22)  ( 3,22)   98%    12  auto  4
-4   27377   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
-5   27380   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
+0   12601   DESLOCANDO         ( 4, 4)  ( 4, 4)   97%    15  auto  1
+1   12602   AGUARDANDO_EQUIPE  ( 3,11)  ( 3,11)   99%     9  auto  2
+2   12603   AGUARDANDO_EQUIPE  ( 3,18)  ( 3,18)   99%     8  auto  3
+3   12604   DESLOCANDO         ( 3,22)  ( 3,22)   98%    12  auto  4
+4   12605   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
+5   12610   DISPONIVEL         ( 8,15)  ( 8,15)  100%     0  auto  -1
 caixa 1   tam 1  baia 1 -> zona D  em andamento
 caixa 2   tam 1  baia 2 -> zona C  em andamento
 caixa 3   tam 1  baia 3 -> zona B  em andamento
@@ -66,12 +66,12 @@ Organizador: caixa 6: erguida por todos, IR_ZONA C (lider 5)
 Organizador: caixa 5 entregue na zona B (robos 4)
 Organizador: caixa 6 entregue na zona C (robos 5)
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   27369   DISPONIVEL         (56,25)  (56,25)   82%    92  auto  -1
-1   27370   DISPONIVEL         (56,18)  (56,18)   84%    83  auto  -1
-2   27371   DISPONIVEL         (56,11)  (56,11)   82%    94  auto  -1
-3   27372   DISPONIVEL         (56, 4)  (56, 4)   78%   111  auto  -1
-4   27377   DISPONIVEL         (56,11)  (56,11)   80%   104  auto  -1
-5   27380   DISPONIVEL         (56,18)  (56,18)   81%    97  auto  -1
+0   12601   DISPONIVEL         (56,25)  (56,25)   82%    92  auto  -1
+1   12602   DISPONIVEL         (56,18)  (56,18)   84%    83  auto  -1
+2   12603   DISPONIVEL         (56,11)  (56,11)   82%    94  auto  -1
+3   12604   DISPONIVEL         (56, 4)  (56, 4)   78%   111  auto  -1
+4   12605   DISPONIVEL         (56,11)  (56,11)   80%   104  auto  -1
+5   12610   DISPONIVEL         (56,18)  (56,18)   81%    97  auto  -1
 caixas entregues: 6
 Encerrando...
 Fim.

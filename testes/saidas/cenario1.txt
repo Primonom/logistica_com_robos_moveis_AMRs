@@ -3,28 +3,28 @@ Mapa gerado com semente 42
   P2: parede 1, y = 20, x 12..17, capacidade 2
   P3: parede 2, y = 13, x 27..32, capacidade 1
   P4: parede 3, y = 24, x 42..47, capacidade 3
+Gestor: robo 0 criado (pid 11355) em (8,15)
 Ponte MQTT: conectada ao broker localhost:1883
-Gestor: robo 0 criado (pid 26644) em (8,15)
 Organizador: 1 robo(s) novo(s) na frota
-Robo 0 vivo (pid 26644)
+Robo 0 vivo (pid 11355)
 Console: robo 0 em DISPONIVEL
 Organizador: caixa 1 (tam 1, baia 1 -> zona A): robos 0 indo para a baia
 Console: robo 0 em DESLOCANDO
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   26644   DESLOCANDO         ( 8,14)  ( 8,14)  100%     1  auto  1
+0   11355   DESLOCANDO         ( 8,13)  ( 8,13)  100%     2  auto  1
 caixa 1   tam 1  baia 1 -> zona A  em andamento
 caixas entregues: 0
 Organizador: caixa 1: equipe completa na baia, ACOPLAR
 Console: robo 0 em OPERANDO_CARGA
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   26644   OPERANDO_CARGA     ( 3, 4)  ( 3, 4)   97%    16  auto  1
+0   11355   OPERANDO_CARGA     ( 3, 4)  ( 3, 4)   97%    16  auto  1
 caixa 1   tam 1  baia 1 -> zona A  em andamento
 caixas entregues: 0
 Organizador: caixa 1: erguida por todos, IR_ZONA A (lider 0)
 Organizador: caixa 1 entregue na zona A (robos 0)
 Console: robo 0 em DISPONIVEL
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   26644   DISPONIVEL         (56, 4)  (56, 4)   78%   111  auto  -1
+0   11355   DISPONIVEL         (56, 4)  (56, 4)   78%   111  auto  -1
 caixas entregues: 1
 Encerrando...
 Fim.

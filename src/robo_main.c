@@ -31,7 +31,10 @@
 #include "comum.h"
 #include "mapa.h"
 
-/* Variáveis globais deste processo (declaradas em comum.h). */
+/* Variáveis globais deste processo (declaradas em comum.h).
+ * POR QUE sem mutex: mem, fila_coletor e id_robo são escritas uma vez no
+ * main, ANTES de criar as duas threads, e depois só lidas. estado_local
+ * tem mutex próprio (ver comum.h). */
 MemoriaCompartilhada *mem;
 mqd_t fila_coletor;
 int id_robo;

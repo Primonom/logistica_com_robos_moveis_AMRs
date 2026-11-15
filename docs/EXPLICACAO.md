@@ -161,6 +161,14 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
   que o Coletor grava).
 - **Fim:** `pedir_fim_coletor` envia `COLETOR_FIM`; como a fila é FIFO, tudo
   o que foi enviado antes ainda é gravado.
+- **Texto dos eventos (histórico de cada robô):** cada evento diz o que o
+  robô fez e onde, com data e hora em ms. Exemplos: `tarefa: ir para a Baia
+  3 buscar a caixa 1`, `carga erguida: pegou a caixa 1 na Baia 3`, `carga
+  solta: entregou a caixa 1 na Zona A`, `bateria baixa: indo recarregar`,
+  `em recarga na estacao`, `recarga completa: disponivel`, `DEFEITO
+  presente: robo parado`, `defeito resolvido`. A baia e a zona saem da
+  posição da mensagem (`TAREFA_IR_BAIA`/`IR_ZONA`), comparada com as
+  constantes de `mapa.h` (`navegacao.c: indice_do_ponto`).
 - **Disponível para a operação remota:** depois de gravar, o Coletor publica
   o registro em `atr/eventos` (ao vivo). O que já está em disco é lido pelo
   comando `historico [n]` (ver 2.6.1).
@@ -465,7 +473,7 @@ A única espera com mutex travado é o `pthread_cond_wait` do Gestor, que
   livre") e o "máximo" medido seria só o limite do código; com o JSON
   pequeno a ponte descartaria o `atr/status` (mensagem "grande demais").
 - **Gestor com muitos robôs:** a posição padrão (8,15) é estacionamento
-  (8.6), então todos os robôs pedidos sem posição nascem nela. Um pedido
+  (8.5), então todos os robôs pedidos sem posição nascem nela. Um pedido
   com posição ocupada vai para a célula livre mais próxima (BFS de
   `reservar_livre_perto`). Com 128 robôs nenhum pedido foi recusado (ver
   docs/ESCALABILIDADE.md).
@@ -720,7 +728,7 @@ Organizador).
   líder (campo `celula_x/y` do slot do líder) e um passo só (1ª célula do
   caminho). Não usa semáforo: a equipe ocupa 1 vaga.
 - **`IR_ZONA` leva o tamanho da equipe** (`n_membros`): o líder só anda com
-  a equipe toda na célula dele (equipe em bloco, 8.6). O mesmo teste decide
+  a equipe toda na célula dele (equipe em bloco, 8.5). O mesmo teste decide
   quando o líder devolve a passagem: ele já saiu da região e a equipe está
   na célula dele (`liberar_se_saiu` + `equipe_junta`). Isso substituiu o
   mecanismo antigo (o líder lia a posição de cada membro no buffer de
@@ -858,14 +866,14 @@ replanejamento ocasional do desvio (um A*, só quando trava).
 - **Robô em DEFEITO** continua ocupando a(s) célula(s) dele (fisicamente
   está ali); os outros desviam dele por este mecanismo.
 - **Seguidores** também usam a grade (entram livres nas células do próprio
-  grupo). Com a equipe em bloco (8.6) o seguidor só pisa na célula do
+  grupo). Com a equipe em bloco (8.5) o seguidor só pisa na célula do
   líder, que é do grupo dele: a reserva nunca falha e ele não precisa de
   desvio (o desvio do seguidor foi removido).
 - **Sem isso:** dois robôs frente a frente esperariam um pelo outro para
   sempre (deadlock clássico: cada um segura uma célula e espera a do outro).
   O desvio quebra a espera circular.
 
-### 8.6 Equipe em bloco e robô ocioso (eliminam o deadlock do benchmark)
+### 8.5 Equipe em bloco e robô ocioso (eliminam o deadlock do benchmark)
 
 **O deadlock que o benchmark achou** (N = 8, semente 42, reproduzido pelo
 cenário 11). As caixas 1, 2 e 3 vão para a zona A e as três equipes cruzam
@@ -957,7 +965,7 @@ quebram a **espera circular**.
 - **Sem ele:** com N grande, o galpão fica coberto de robôs parados e
   trava (zero entregas com N = 128).
 
-### 8.5 Na tela
+### 8.6 Na tela
 - `atr/status`: cada robô tem `"bloqueado": true/false` (esperou célula ou
   passagem neste ciclo; a Navegação passa à Status pelo `estado_local`) e cada
   passagem tem `"dentro"` e `"sentido"` (lidos do monitor).
@@ -992,14 +1000,14 @@ quebram a **espera circular**.
    células; numa grade grande seria preciso um heap.
 
 **Equipes**
-8. A equipe anda em bloco (8.6): o líder espera a equipe toda na célula
+8. A equipe anda em bloco (8.5): o líder espera a equipe toda na célula
    dele a cada passo, então o transporte é ~2× mais lento que um robô
    sozinho. O Organizador continua esperando **todos** na zona antes do
    `SOLTAR` (o buffer de status dos membros tem atraso).
 9. O líder é o mais perto da baia (7.4) e não muda durante o transporte.
    Ele só libera uma passagem quando já saiu dela e a equipe está na célula
    dele; numa célula de estacionamento ele não consegue contar a equipe na
-   grade e segue sem esperar (8.6).
+   grade e segue sem esperar (8.5).
 10. Uma carga por baia de cada vez (no máximo 4 entregas ao mesmo tempo: é o
     que limita a vazão do galpão, ver docs/ESCALABILIDADE.md).
 11. Se um robô de uma equipe fica em DEFEITO para sempre, a equipe fica
@@ -1118,7 +1126,7 @@ cenários 7 a 11.
 | 8 | Anti-colisão, frente a frente: robôs 0 em (1,15) e 1 em (11,15), em manual, com `goto` em sentidos opostos na mesma linha. Nunca ocupam a mesma célula; o robô 1 (maior id) fica bloqueado e depois de 1 s "desviando de robo"; os dois chegam. O script confere o desvio, as 2 chegadas e zero `COLISAO`. |
 | 9 | Mão única na P1 (capacidade 4): robô 0 atravessa para a direita e robô 1 para a esquerda. Há vaga no semáforo, mas o robô 1 fica "esperando passagem P1 (cheia ou na contramao)" até o robô 0 sair; só então "entrou na passagem P1 (para a esquerda)". Ninguém trava, zero `COLISAO`. |
 | 10 | 6 robôs pedindo a mesma posição padrão (estacionamento: os 6 nascem nela) e 6 caixas de tamanho 1 ao mesmo tempo: as 6 entregues, sem timeout e sem `COLISAO` (o script confere as duas coisas). |
-| 11 | O deadlock que o benchmark achou (8.6): 8 robôs, caixas 1–4 todas para a zona A, com as equipes cruzando P1 e P3 juntas. Com a equipe em bloco as 8 caixas são entregues e não há `COLISAO` (o script confere). Com o código antigo travou em 2 de 5 rodadas (8.6). |
+| 11 | O deadlock que o benchmark achou (8.5): 8 robôs, caixas 1–4 todas para a zona A, com as equipes cruzando P1 e P3 juntas. Com a equipe em bloco as 8 caixas são entregues e não há `COLISAO` (o script confere). Com o código antigo travou em 2 de 5 rodadas (8.5). |
 
 Os cenários usam `aguarda <id> <ESTADO> [timeout_s]` (espera o robô chegar a
 um estado, lendo o buffer de status a cada 100 ms) em vez de `espera` sempre

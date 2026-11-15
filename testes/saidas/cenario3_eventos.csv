@@ -1,49 +1,50 @@
-2026-11-14 20:29:11.671;-1;sistema iniciado
-2026-11-14 20:29:11.671;-1;mapa gerado com semente 42
-2026-11-14 20:29:11.674;0;robo criado (pid 26904) em (5,15)
-2026-11-14 20:29:11.675;1;robo criado (pid 26905) em (6,15)
-2026-11-14 20:29:11.677;2;robo criado (pid 26906) em (22,20)
-2026-11-14 20:29:11.679;-1;2 robo(s) novo(s) na frota
-2026-11-14 20:29:11.682;0;robo vivo
-2026-11-14 20:29:11.685;1;robo vivo
-2026-11-14 20:29:11.687;2;robo vivo
-2026-11-14 20:29:11.692;0;ocioso: indo para o estacionamento
-2026-11-14 20:29:11.693;2;ocioso: indo para o estacionamento
-2026-11-14 20:29:11.696;1;ocioso: indo para o estacionamento
-2026-11-14 20:29:11.886;1;chegou ao destino
-2026-11-14 20:29:12.176;-1;1 robo(s) novo(s) na frota
-2026-11-14 20:29:12.181;-1;caixa 1 (tam 2, baia 2 -> zona C): robos 0 1 indo para a baia
-2026-11-14 20:29:12.183;0;tarefa: ir para a baia (caixa 1)
-2026-11-14 20:29:12.186;1;tarefa: ir para a baia (caixa 1)
-2026-11-14 20:29:13.083;0;chegou ao destino
-2026-11-14 20:29:13.286;1;chegou ao destino
-2026-11-14 20:29:13.587;2;chegou ao destino
-2026-11-14 20:29:13.677;-1;caixa 1: equipe completa na baia, ACOPLAR
-2026-11-14 20:29:13.783;0;carga erguida
-2026-11-14 20:29:13.786;1;carga erguida
-2026-11-14 20:29:14.176;-1;caixa 1: erguida por todos, IR_ZONA C (lider 0)
-2026-11-14 20:29:14.186;1;seguindo o lider 0
-2026-11-14 20:29:15.983;0;entrou na passagem P1 (para a direita)
-2026-11-14 20:29:16.086;1;DEFEITO: robo parado
-2026-11-14 20:29:16.177;-1;caixa 1: robo da equipe em DEFEITO, PAUSAR
-2026-11-14 20:29:16.183;0;pausado (equipe com defeito)
-2026-11-14 20:29:16.186;1;pausado (equipe com defeito)
-2026-11-14 20:29:17.286;1;defeito resolvido
-2026-11-14 20:29:17.677;-1;caixa 1: defeito resolvido, CONTINUAR
-2026-11-14 20:29:17.683;0;continuando
-2026-11-14 20:29:17.686;1;continuando
-2026-11-14 20:29:18.983;0;saiu da passagem P1
-2026-11-14 20:29:21.183;0;entrou na passagem P3 (para a direita)
-2026-11-14 20:29:22.583;0;saiu da passagem P3
-2026-11-14 20:29:26.383;0;entrou na passagem P4 (para a direita)
-2026-11-14 20:29:27.783;0;saiu da passagem P4
-2026-11-14 20:29:30.483;0;chegou ao destino
-2026-11-14 20:29:31.177;-1;caixa 1 entregue na zona C (robos 0 1)
-2026-11-14 20:29:31.183;0;carga solta
-2026-11-14 20:29:31.186;1;carga solta
-2026-11-14 20:29:31.285;0;bateria baixa: indo recarregar
-2026-11-14 20:29:32.783;0;entrou na passagem P4 (para a esquerda)
-2026-11-14 20:29:33.483;0;saiu da passagem P4
-2026-11-14 20:29:34.283;0;chegou ao destino
-2026-11-14 20:29:38.884;0;recarga completa: disponivel
-2026-11-14 20:29:39.176;-1;sistema encerrado
+2026-11-15 02:10:19.665;-1;sistema iniciado
+2026-11-15 02:10:19.665;-1;mapa gerado com semente 42
+2026-11-15 02:10:19.667;0;robo criado (pid 11802) em (5,15)
+2026-11-15 02:10:19.668;1;robo criado (pid 11803) em (6,15)
+2026-11-15 02:10:19.668;2;robo criado (pid 11804) em (22,20)
+2026-11-15 02:10:19.669;-1;2 robo(s) novo(s) na frota
+2026-11-15 02:10:19.671;1;robo vivo
+2026-11-15 02:10:19.671;0;robo vivo
+2026-11-15 02:10:19.675;2;robo vivo
+2026-11-15 02:10:19.675;1;ocioso: indo para o estacionamento
+2026-11-15 02:10:19.676;0;ocioso: indo para o estacionamento
+2026-11-15 02:10:19.678;2;ocioso: indo para o estacionamento
+2026-11-15 02:10:19.871;1;chegou ao destino
+2026-11-15 02:10:20.072;0;chegou ao destino
+2026-11-15 02:10:20.169;-1;1 robo(s) novo(s) na frota
+2026-11-15 02:10:20.171;1;tarefa: ir para a Baia 2 buscar a caixa 1
+2026-11-15 02:10:20.172;-1;caixa 1 (tam 2, baia 2 -> zona C): robos 0 1 indo para a baia
+2026-11-15 02:10:20.172;0;tarefa: ir para a Baia 2 buscar a caixa 1
+2026-11-15 02:10:21.071;1;chegou ao destino
+2026-11-15 02:10:21.272;0;chegou ao destino
+2026-11-15 02:10:21.575;2;chegou ao destino
+2026-11-15 02:10:21.669;-1;caixa 1: equipe completa na baia, ACOPLAR
+2026-11-15 02:10:21.771;1;carga erguida: pegou a caixa 1 na Baia 2
+2026-11-15 02:10:21.772;0;carga erguida: pegou a caixa 1 na Baia 2
+2026-11-15 02:10:22.170;-1;caixa 1: erguida por todos, IR_ZONA C (lider 0)
+2026-11-15 02:10:22.171;1;seguindo o lider 0
+2026-11-15 02:10:23.972;0;entrou na passagem P1 (para a direita)
+2026-11-15 02:10:24.071;1;DEFEITO presente: robo parado
+2026-11-15 02:10:24.170;-1;caixa 1: robo da equipe em DEFEITO, PAUSAR
+2026-11-15 02:10:24.171;1;pausado (equipe com defeito)
+2026-11-15 02:10:24.172;0;pausado (equipe com defeito)
+2026-11-15 02:10:25.271;1;defeito resolvido
+2026-11-15 02:10:25.670;-1;caixa 1: defeito resolvido, CONTINUAR
+2026-11-15 02:10:25.671;1;continuando
+2026-11-15 02:10:25.672;0;continuando
+2026-11-15 02:10:26.972;0;saiu da passagem P1
+2026-11-15 02:10:29.172;0;entrou na passagem P3 (para a direita)
+2026-11-15 02:10:30.572;0;saiu da passagem P3
+2026-11-15 02:10:34.372;0;entrou na passagem P4 (para a direita)
+2026-11-15 02:10:35.772;0;saiu da passagem P4
+2026-11-15 02:10:38.472;0;chegou ao destino
+2026-11-15 02:10:39.168;-1;caixa 1 entregue na zona C (robos 0 1)
+2026-11-15 02:10:39.171;1;carga solta: entregou a caixa 1 na Zona C
+2026-11-15 02:10:39.172;0;carga solta: entregou a caixa 1 na Zona C
+2026-11-15 02:10:39.272;0;bateria baixa: indo recarregar
+2026-11-15 02:10:40.772;0;entrou na passagem P4 (para a esquerda)
+2026-11-15 02:10:41.472;0;saiu da passagem P4
+2026-11-15 02:10:42.272;0;em recarga na estacao
+2026-11-15 02:10:46.872;0;recarga completa: disponivel
+2026-11-15 02:10:47.169;-1;sistema encerrado

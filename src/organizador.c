@@ -70,7 +70,8 @@
  *     ACOPLAR vai para todos no mesmo ciclo (acoplamento síncrono). O
  *     RECARREGAR também vai por elas (não mexe no estado do robô direto).
  *   - pegar_robos_novos(): aviso assíncrono do Gestor (ver gestor.c).
- *   - equipes[] e em_equipe[] só são usados por esta thread: sem mutex.
+ *   - equipes[], em_equipe[] e ultima_avisada só são usados por esta
+ *     thread: sem mutex.
  *   - calcular_caminho (A*): lê mem->mapa (só leitura) e a ocupação das
  *     passagens com sem_getvalue (estimativa; ver mapa.c).
  *   - mem->mutex_tempos (PROCESS_SHARED): no fim de cada ciclo grava a
@@ -450,9 +451,6 @@ static void formar_equipe(Equipe *e, Caixa c, int indice, int membros[])
     avisar(texto);
 }
 
-/* 2) Atribui caixas (primeira com baia livre) enquanto houver equipe
- * completa. Cada caixa atribuída ocupa a baia dela, então a próxima volta
- * do laço já pula essa baia. */
 /* Publica na memória compartilhada qual caixa está esperando equipe (-1 =
  * nenhuma) e quantos robôs livres havia: só para a Tela de Operação mostrar
  * o motivo da espera. */
@@ -482,6 +480,9 @@ static void mandar_recarregar(const bool sem_bateria[], int caixa_id)
     }
 }
 
+/* 2) Atribui caixas (primeira com baia livre) enquanto houver equipe
+ * completa. Cada caixa atribuída ocupa a baia dela, então a próxima volta
+ * do laço já pula essa baia. */
 static void atribuir_caixas(void)
 {
     int membros[TAMANHO_MAX_CAIXA];

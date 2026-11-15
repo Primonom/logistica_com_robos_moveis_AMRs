@@ -4,53 +4,53 @@ Mapa gerado com semente 42
   P3: parede 2, y = 13, x 27..32, capacidade 1
   P4: parede 3, y = 24, x 42..47, capacidade 3
 Ponte MQTT: conectada ao broker localhost:1883
-Gestor: robo 0 criado (pid 26955) em (20,15)
-Gestor: robo 1 criado (pid 26956) em (22,15)
-Organizador: 2 robo(s) novo(s) na frota
-Gestor: robo 2 criado (pid 26957) em (24,15)
-Robo 1 vivo (pid 26956)
-Robo 0 vivo (pid 26955)
-Robo 2 vivo (pid 26957)
-Console: robo 2 em DISPONIVEL
+Gestor: robo 0 criado (pid 11939) em (20,15)
 Organizador: 1 robo(s) novo(s) na frota
+Gestor: robo 1 criado (pid 11940) em (22,15)
+Gestor: robo 2 criado (pid 11941) em (24,15)
+Robo 1 vivo (pid 11940)
+Robo 0 vivo (pid 11939)
+Robo 2 vivo (pid 11941)
+Console: robo 2 em DISPONIVEL
+Organizador: 2 robo(s) novo(s) na frota
 Organizador: caixa 1 (tam 4) aguardando equipe: 3 robo(s) livre(s)
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   26955   DISPONIVEL         (22, 1)  (22, 1)  100%    16  auto  -1
-1   26956   DISPONIVEL         (22, 1)  (22, 1)  100%    14  auto  -1
-2   26957   DISPONIVEL         (22, 1)  (22, 1)  100%    16  auto  -1
+0   11939   DISPONIVEL         (22, 1)  (22, 1)  100%    16  auto  -1
+1   11940   DISPONIVEL         (22, 1)  (22, 1)  100%    14  auto  -1
+2   11941   DISPONIVEL         (22, 1)  (22, 1)  100%    16  auto  -1
 caixa 1   tam 4  baia 1 -> zona B  esperando
 caixa 2   tam 1  baia 3 -> zona D  esperando
 caixas entregues: 0
 Console: robo 2 em MANUAL
 Console: robo 2 em DISPONIVEL
-Gestor: robo 3 criado (pid 26964) em (26,15)
-Robo 3 vivo (pid 26964)
+Gestor: robo 3 criado (pid 11983) em (26,15)
+Robo 3 vivo (pid 11983)
 Organizador: 1 robo(s) novo(s) na frota
 Organizador: caixa 1 (tam 4, baia 1 -> zona B): robos 3 0 1 2 indo para a baia
 Organizador: caixa 2 (tam 1) aguardando equipe: 0 robo(s) livre(s)
 Organizador: caixa 1: equipe completa na baia, ACOPLAR
 Console: robo 3 em OPERANDO_CARGA
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   26955   OPERANDO_CARGA     ( 3, 4)  ( 3, 4)   93%    54  auto  1
-1   26956   OPERANDO_CARGA     ( 3, 4)  ( 3, 4)   92%    52  auto  1
-2   26957   OPERANDO_CARGA     ( 3, 4)  ( 3, 4)   93%    54  auto  1
-3   26964   OPERANDO_CARGA     ( 3, 4)  ( 3, 4)   94%    34  auto  1
+0   11939   AGUARDANDO_EQUIPE  ( 3, 4)  ( 3, 4)   93%    54  auto  1
+1   11940   AGUARDANDO_EQUIPE  ( 3, 4)  ( 3, 4)   92%    52  auto  1
+2   11941   AGUARDANDO_EQUIPE  ( 3, 4)  ( 3, 4)   93%    54  auto  1
+3   11983   OPERANDO_CARGA     ( 3, 4)  ( 3, 4)   92%    40  auto  1
 caixa 1   tam 4  baia 1 -> zona B  em andamento
 caixa 2   tam 1  baia 3 -> zona D  esperando
 caixas entregues: 0
-Gestor: robo 4 criado (pid 26970) em (8,15)
-Robo 4 vivo (pid 26970)
+Gestor: robo 4 criado (pid 11992) em (8,15)
+Robo 4 vivo (pid 11992)
 Organizador: 1 robo(s) novo(s) na frota
 Organizador: caixa 1: erguida por todos, IR_ZONA B (lider 3)
 Organizador: caixa 2 (tam 1, baia 3 -> zona D): robos 4 indo para a baia
 Organizador: caixa 2: equipe completa na baia, ACOPLAR
 Console: robo 4 em OPERANDO_CARGA
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   26955   OPERANDO_CARGA     (10, 5)  (10, 5)   91%    62  auto  1
-1   26956   OPERANDO_CARGA     (10, 5)  (10, 5)   90%    60  auto  1
-2   26957   OPERANDO_CARGA     (10, 5)  (10, 5)   91%    62  auto  1
-3   26964   OPERANDO_CARGA     (10, 6)  (10, 6)   92%    43  auto  1
-4   26970   OPERANDO_CARGA     ( 3,18)  ( 3,18)   99%     8  auto  2
+0   11939   OPERANDO_CARGA     ( 9, 5)  ( 9, 5)   91%    61  auto  1
+1   11940   OPERANDO_CARGA     ( 8, 5)  ( 8, 5)   91%    58  auto  1
+2   11941   OPERANDO_CARGA     ( 9, 5)  ( 9, 5)   91%    61  auto  1
+3   11983   OPERANDO_CARGA     ( 9, 5)  ( 9, 5)   91%    47  auto  1
+4   11992   OPERANDO_CARGA     ( 3,18)  ( 3,18)   99%     8  auto  2
 caixa 1   tam 4  baia 1 -> zona B  em andamento
 caixa 2   tam 1  baia 3 -> zona D  em andamento
 caixas entregues: 0
@@ -60,11 +60,11 @@ Organizador: caixa 1 entregue na zona B (robos 3 0 1 2)
 Console: robo 3 em DISPONIVEL
 Console: robo 4 em DISPONIVEL
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   26955   DISPONIVEL         (56,11)  (56,11)   75%   142  auto  -1
-1   26956   DISPONIVEL         (56,11)  (56,11)   74%   140  auto  -1
-2   26957   DISPONIVEL         (56,11)  (56,11)   75%   142  auto  -1
-3   26964   DISPONIVEL         (56,11)  (56,11)   76%   122  auto  -1
-4   26970   DISPONIVEL         (56,25)  (56,25)   84%    82  auto  -1
+0   11939   DISPONIVEL         (56,11)  (56,11)   75%   142  auto  -1
+1   11940   DISPONIVEL         (56,11)  (56,11)   74%   140  auto  -1
+2   11941   DISPONIVEL         (56,11)  (56,11)   75%   142  auto  -1
+3   11983   DISPONIVEL         (56,11)  (56,11)   75%   128  auto  -1
+4   11992   DISPONIVEL         (56,25)  (56,25)   84%    82  auto  -1
 caixas entregues: 2
 Encerrando...
 Fim.

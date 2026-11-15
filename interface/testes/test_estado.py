@@ -86,7 +86,7 @@ class TestEstado(unittest.TestCase):
         e = Estado()
         robo = {"id": 0, "x": 1, "y": 1, "sp_x": 2, "sp_y": 1, "bateria": 50, "distancia": 9}
         e.guardar_status(status(robos=[robo]), agora=0.0)
-        e.guardar_evento({"robo": 0, "texto": "DEFEITO: robo parado"})
+        e.guardar_evento({"robo": 0, "texto": "DEFEITO presente: robo parado"})
         e.guardar_evento({"robo": -1, "texto": "sistema iniciado"})
         d = e.copia(agora=0.0)
         self.assertEqual([ev["texto"] for ev in d["eventos"]], ["sistema iniciado"])

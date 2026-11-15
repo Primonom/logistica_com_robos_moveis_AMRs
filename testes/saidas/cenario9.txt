@@ -4,22 +4,21 @@ Mapa gerado com semente 42
   P3: parede 2, y = 13, x 27..32, capacidade 1
   P4: parede 3, y = 24, x 42..47, capacidade 3
 Ponte MQTT: conectada ao broker localhost:1883
-Gestor: robo 0 criado (pid 27339) em (9,12)
-Organizador: 1 robo(s) novo(s) na frota
-Gestor: robo 1 criado (pid 27340) em (21,12)
-Robo 0 vivo (pid 27339)
-Robo 1 vivo (pid 27340)
+Gestor: robo 0 criado (pid 12573) em (9,12)
+Gestor: robo 1 criado (pid 12574) em (21,12)
+Organizador: 2 robo(s) novo(s) na frota
+Robo 0 vivo (pid 12573)
+Robo 1 vivo (pid 12574)
 Console: robo 1 em DISPONIVEL
 Console: robo 0 em MANUAL
 Console: robo 1 em MANUAL
-Organizador: 1 robo(s) novo(s) na frota
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   27339   MANUAL             (17,12)  (17,12)   98%    10  man   -1
-1   27340   MANUAL             (17,11)  (17,11)   99%     7  man   -1
+0   12573   MANUAL             (16,12)  (17,12)   99%     9  man   -1
+1   12574   MANUAL             (17,11)  (17,11)   99%     7  man   -1
 caixas entregues: 0
 id  pid     estado             pos      sp       bat   dist  modo  carga
-0   27339   MANUAL             (21,11)  (21,11)   97%    17  man   -1
-1   27340   MANUAL             ( 8,13)  ( 8,13)   97%    18  man   -1
+0   12573   MANUAL             (21,11)  (21,11)   97%    17  man   -1
+1   12574   MANUAL             ( 8,13)  ( 8,13)   97%    18  man   -1
 caixas entregues: 0
 Encerrando...
 Fim.

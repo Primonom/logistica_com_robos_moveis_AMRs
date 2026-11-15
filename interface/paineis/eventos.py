@@ -137,7 +137,7 @@ class Notificador:
     @staticmethod
     def _avisar_evento(e):
         texto = e["texto"].lower()
-        if "defeito:" in texto:
+        if "defeito presente" in texto:
             ui.notify(f"Robô {e['robo']} em DEFEITO", type="negative", icon="warning",
                       position="bottom-right", timeout=6000)
         elif "bateria baixa" in texto:

@@ -69,7 +69,7 @@ static void verificar_defeito(bool defeito)
     pthread_mutex_unlock(&estado_local.mutex);
 
     /* Eventos fora do mutex (mq_send pode demorar). */
-    if (entrou) registrar_evento(fila_coletor, id_robo, "DEFEITO: robo parado");
+    if (entrou) registrar_evento(fila_coletor, id_robo, "DEFEITO presente: robo parado");
     if (saiu)   registrar_evento(fila_coletor, id_robo, "defeito resolvido");
 }
 

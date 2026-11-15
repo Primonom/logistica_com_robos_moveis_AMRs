@@ -40,7 +40,7 @@ O resultado:
 - os dois **pontos extras** do enunciado: mapa aleatório com passagens de
   capacidade 1–4 e IA de rotas (A*) (+3), e anti-colisão descentralizada em
   cada robô (+2) — capítulo 7;
-- 11 cenários de teste automáticos, 41 testes da interface e um benchmark de
+- 11 cenários de teste automáticos, 42 testes da interface e um benchmark de
   escalabilidade de 1 a 128 robôs.
 
 Como compilar e rodar está em `README.md` / `docs/INSTRUCOES.pdf`. Um comando
@@ -182,7 +182,7 @@ manual na tela.
 | 5. Baias com número fixo de caixas (1–4) no início | `config/caixas.txt` (3 por baia), `organizador.c: carregar_caixas` | Execução padrão (`./logistica`) |
 | 5. Fila pré-definida, não ordenada | `mem->caixas[]` em ordem de chegada; `primeira_da_fila` | Cenários 4, 10, 11 |
 | 5. Escolhe os robôs | `organizador.c: escolher_robos` (menor caminho A*, bateria suficiente) | Cenário 2 (robô mais longe fica de fora) |
-| 5. Libera a carga só com todos em posição | `acompanhar_equipe` (ACOPLAR só com todos `AGUARDANDO_EQUIPE`; `IR_ZONA` só com todos `OPERANDO_CARGA`) | Cenário 2 (os 3 "carga erguida" em 5 ms) |
+| 5. Libera a carga só com todos em posição | `acompanhar_equipe` (ACOPLAR só com todos `AGUARDANDO_EQUIPE`; `IR_ZONA` só com todos `OPERANDO_CARGA`) | Cenário 2 (os 3 "carga erguida" em 2 ms) |
 | 5. IPC com os processos dos robôs | filas `/atr_robo_<id>` (`gestor.c: enviar_para_robo`) + memória compartilhada | Todos |
 | 5. Troca informações com a tela via MQTT | `ponte_mqtt.c` (`atr/status`, `atr/comando`) | Tela |
 | 5a. Posição dos robôs, caixas a mover e já entregues | `paineis/mapa.py`, `paineis/caixas.py` ("mostrar entregues"), contadores | Figuras 5.1–5.3; `test_mapa_svg.py` |
@@ -190,10 +190,10 @@ manual na tela.
 | 5c. Troca manual/automático | botões Auto/Manual → `manual <id>` / `auto <id>` | Cenários 8 e 9; tela |
 | 5d. Setpoint manual: posição arbitrária, recarga, baia | "ir para…" (baias, zonas, estações), x/y, clique no mapa → `goto` | Cenários 8 e 9; tela |
 | 6. Baia, destino e robôs de cada carga | `organizador.c: finalizar_entrega` → `logs/cargas.csv` | `testes/saidas/cenario*_cargas.csv` |
-| 6. Histórico de cada robô | `registrar_evento` em Navegação/Status/Organizador ("tarefa: ir para a baia", "carga erguida", "bateria baixa: indo recarregar", "DEFEITO: robo parado"...) | `cenario*_eventos.csv`; painel Eventos com filtro por robô |
+| 6. Histórico de cada robô | `registrar_evento` em Navegação/Status/Organizador ("tarefa: ir para a Baia 3 buscar a caixa 1", "carga erguida: pegou a caixa 1 na Baia 3", "carga solta: entregou a caixa 1 na Zona A", "bateria baixa: indo recarregar", "em recarga na estacao", "DEFEITO presente: robo parado"...) | `cenario*_eventos.csv`; painel Eventos com filtro por robô |
 | 6. Timestamp com data e hora | `eventos.c: enviar_coletor` (`CLOCK_REALTIME` no envio); `coletor.c: formatar_data_hora` (ms) | Todos os CSV |
 | 6. Em disco e disponível remotamente | `fprintf` + `fflush`; `atr/eventos` (ao vivo) e `historico [n]` (do disco) | Botão "Carregar histórico do disco" |
-| 7. Tela com posições e todos os dados/comandos | `interface/app.py` + painéis | 41 testes `pytest`; capturas |
+| 7. Tela com posições e todos os dados/comandos | `interface/app.py` + painéis | 42 testes `pytest`; capturas |
 | 8. Simula o hardware (setpoint → posição) | `simulador.c: simular_robo` | Todos |
 | 8. Mapa com baias e zonas | `mapa.c: gerar_mapa`; `atr/mapa` | Cenário 5; tela |
 | 8. Caminhos de no máximo 1, 2, 3 robôs | 4 passagens com capacidades {1,2,3,4} sorteadas; semáforos | Cenários 5, 6, 9; capturas |
@@ -208,7 +208,7 @@ manual na tela.
 | Requisito | Onde está | Como foi testado |
 |---|---|---|
 | Tabela 1: `i_posicao_x/y`, `i_carga_atracada`, `i_percentual_bateria`, `i_falha`, `o_sp_posicao_x/y`, `o_acoplar_e_erguer` | `comum.h: Hardware`; escritos pelo simulador (`i_*`) e pela Navegação (`o_*`) | Todos |
-| `o_acoplar_e_erguer` síncrono | ACOPLAR para todos no mesmo ciclo só com todos na baia (`organizador.c: acompanhar_equipe`) | Cenário 2: `20:38:31.582/.583/.587 carga erguida` (robôs 0, 1, 2) |
+| `o_acoplar_e_erguer` síncrono | ACOPLAR para todos no mesmo ciclo só com todos na baia (`organizador.c: acompanhar_equipe`) | Cenário 2: `02:10:03.616/.617/.618 carga erguida` (robôs 1, 0, 2) |
 | Tabela 2: `e_estado`, `e_posicao`, `j_sp_posicao` | `comum.h: Robo` (buffer de status) | `status`; JSON `atr/status` |
 | Passagens de 1, 2 e 3 (e 4) robôs | `mapa.c: sortear` (capacidades embaralhadas), `main.c: criar_semaforos` | Cenário 5 (duas sementes), 6, 9 |
 | MQTT publisher e subscriber (C e Python) | `ponte_mqtt.c` (libmosquitto), `interface/mqtt_cliente.py` (paho-mqtt) | Tela; `test_estado.py` |
@@ -222,7 +222,7 @@ manual na tela.
 | 4. Documentação PDF com compilar e rodar | `docs/INSTRUCOES.pdf` (= `README.md`) e este relatório |
 | 5. Executar tudo a partir de um único arquivo | `./rodar.sh` (nativo: mosquitto + tela + núcleo) ou `docker compose up --build`; o `./logistica` cria sozinho todos os processos `./robo` |
 | 6. Profissionalismo e organização | Makefile sem warnings (`-Wall -Wextra`), Docker, cabeçalho "Sincronização" em cada arquivo, `docs/EXPLICACAO.md`, versionamento git |
-| 7. Testar cada módulo e cada interação | 11 cenários automáticos com conferências (`rodar_todos.sh`), 41 testes `pytest` da interface, benchmark de 1 a 128 robôs |
+| 7. Testar cada módulo e cada interação | 11 cenários automáticos com conferências (`rodar_todos.sh`), 42 testes `pytest` da interface, benchmark de 1 a 128 robôs |
 
 # 4. Mecanismos de sincronização e partes críticas do código
 
@@ -417,7 +417,7 @@ do Console.
 ```bash
 make clean && make                    # zero warnings
 testes/rodar_todos.sh                 # 11 cenários; avisa timeout/COLISAO/falhas
-interface/.venv/bin/python -m pytest -q interface    # 41 testes da tela
+interface/.venv/bin/python -m pytest -q interface    # 42 testes da tela
 ```
 
 Cada cenário é um roteiro do Console (`testes/cenarioN.txt`) com a semente
@@ -448,17 +448,20 @@ Trechos das saídas (de `testes/saidas/`):
 # cenário 2 — equipe pelo A*, líder 1, acoplamento síncrono
 Organizador: caixa 1 (tam 3, baia 2 -> zona C): robos 1 2 0 indo para a baia
 Organizador: caixa 1: equipe completa na baia, ACOPLAR
-2026-11-14 20:38:31.582;0;carga erguida
-2026-11-14 20:38:31.583;1;carga erguida
-2026-11-14 20:38:31.587;2;carga erguida
+2026-11-15 02:10:03.616;1;carga erguida: pegou a caixa 1 na Baia 2
+2026-11-15 02:10:03.617;0;carga erguida: pegou a caixa 1 na Baia 2
+2026-11-15 02:10:03.618;2;carga erguida: pegou a caixa 1 na Baia 2
 Organizador: caixa 1: erguida por todos, IR_ZONA C (lider 1)
 Organizador: caixa 1 entregue na zona C (robos 1 2 0)
+2026-11-15 02:10:19.016;1;carga solta: entregou a caixa 1 na Zona C
 
 # cenário 3 — falha no transporte e recarga depois da entrega
 Organizador: caixa 1: robo da equipe em DEFEITO, PAUSAR
 Organizador: caixa 1: defeito resolvido, CONTINUAR
-2026-11-14 20:29:31.285;0;bateria baixa: indo recarregar
-2026-11-14 20:29:38.884;0;recarga completa: disponivel
+2026-11-15 02:10:24.071;1;DEFEITO presente: robo parado
+2026-11-15 02:10:39.272;0;bateria baixa: indo recarregar
+2026-11-15 02:10:42.272;0;em recarga na estacao
+2026-11-15 02:10:46.872;0;recarga completa: disponivel
 
 # cenário 4 — caixa grande espera sem reservar robôs
 Organizador: caixa 1 (tam 4) aguardando equipe: 3 robo(s) livre(s)
@@ -474,14 +477,14 @@ Organizador: robo 2 sem bateria para a caixa 1: RECARREGAR
 Organizador: caixa 1 (tam 3) aguardando equipe: 2 robo(s) livre(s)
 
 # cenário 9 — mão única
-2026-11-14 20:33:50.302;0;entrou na passagem P1 (para a direita)
-2026-11-14 20:33:50.605;1;esperando passagem P1 (cheia ou na contramao)
-2026-11-14 20:33:52.105;1;entrou na passagem P1 (para a esquerda)
+2026-11-15 02:14:58.129;0;entrou na passagem P1 (para a direita)
+2026-11-15 02:14:58.431;1;esperando passagem P1 (cheia ou na contramao)
+2026-11-15 02:14:59.930;1;entrou na passagem P1 (para a esquerda)
 
 # cenário 11 — cargas.csv (data;caixa;baia;zona;robôs)
-2026-11-14 20:35:29.681;1;1;A;0
-2026-11-14 20:35:37.681;2;2;A;1 2
-2026-11-14 20:35:40.681;3;3;A;3 4 5
+2026-11-15 02:16:37.313;1;1;A;0
+2026-11-15 02:16:45.313;2;2;A;1 2
+2026-11-15 02:16:48.313;3;3;A;3 4 5
 ```
 
 ## 5.3 Testes da interface (`pytest`)
@@ -490,7 +493,7 @@ Organizador: caixa 1 (tam 3) aguardando equipe: 2 robo(s) livre(s)
 |---|---|
 | `test_estado.py` (13) | Loja de estado: status, eventos, respostas de comando, histórico, `tempos` |
 | `test_mapa_svg.py` (22) | Desenho do mapa a partir de `atr/mapa` (semente 42): paredes, passagens, robôs, rotas |
-| `test_cores.py` (3), `test_desenhos.py` (3) | Cores/ícones por estado e textos dos eventos |
+| `test_cores.py` (4), `test_desenhos.py` (3) | Cores/ícones por estado, textos e categorias dos eventos |
 
 ## 5.4 Capturas de tela (mapa aleatório, semente 42)
 
@@ -709,7 +712,7 @@ corrigindo um deadlock real encontrado por teste.
 | Prioridades Rate Monotonic opcionais | `ATR_TEMPO_REAL=1`: SCHED_FIFO com prioridades RM; comparação medida normal × tempo real |
 | Medição de tempo real embutida | `tempos` / `medir_falha`; benchmark automático de 1 a 128 robôs com gráficos, Liu & Layland e RTA |
 | Docker | `docker compose up --build` sobe broker, núcleo e tela; `SYS_NICE` para o modo tempo real |
-| Testes automatizados | 11 cenários com conferências automáticas + 41 testes `pytest` |
+| Testes automatizados | 11 cenários com conferências automáticas + 42 testes `pytest` |
 | Histórico remoto | Comando `historico [n]` lê os CSV do disco e a tela mostra ("Carregar histórico do disco") |
 | Execução com um comando | `./rodar.sh` (nativo) e empacotamento `./empacotar.sh` |
 

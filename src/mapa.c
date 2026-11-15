@@ -4,10 +4,9 @@
  *
  * Não cria threads. Funções usadas por:
  *   - processo central: gerar_mapa (main, uma vez, antes das threads),
- *     calcular_caminho (Organizador escolhe robôs), posicao_valida
+ *     passos_caminho e estacao_mais_proxima (Organizador escolhe os robôs
+ *     pelo menor caminho A* e estima a bateria da tarefa), posicao_valida
  *     (Console e ponte MQTT), na_estacao (simulador);
- *   - processo central: também passos_caminho e estacao_mais_proxima
- *     (Organizador estima a bateria da tarefa);
  *   - processo robo: calcular_caminho e calcular_caminho_evitando
  *     (Navegação; o segundo no desvio de travamentos, ponto extra +2),
  *     estacao_mais_proxima (Status e Navegação) e na_estacao (Status).

@@ -409,7 +409,7 @@ int pegar_robos_novos(void);         /* Organizador: quantos robôs novos desde 
 void *tarefa_organizador(void *arg); /* thread; arg = nome do arquivo de caixas */
 bool adicionar_caixa(int id, int tamanho, int baia, int zona); /* id < 0: automático */
 
-/* ---------- ponte_mqtt.c (processo central, Etapa 2) ---------- */
+/* ---------- ponte_mqtt.c (processo central) ---------- */
 void ponte_criar(void);              /* main, ANTES de criar as threads */
 void *tarefa_ponte_mqtt(void *arg);  /* thread (arg não usado) */
 void ponte_publicar(const char *topico, const char *texto); /* qualquer thread */

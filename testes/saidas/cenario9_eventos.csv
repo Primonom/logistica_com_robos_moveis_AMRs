@@ -1,21 +1,20 @@
-2026-11-14 20:33:49.683;-1;sistema iniciado
-2026-11-14 20:33:49.683;-1;mapa gerado com semente 42
-2026-11-14 20:33:49.686;0;robo criado (pid 27339) em (9,12)
-2026-11-14 20:33:49.690;1;robo criado (pid 27340) em (21,12)
-2026-11-14 20:33:49.692;-1;1 robo(s) novo(s) na frota
-2026-11-14 20:33:49.701;0;robo vivo
-2026-11-14 20:33:49.704;1;robo vivo
-2026-11-14 20:33:49.713;1;ocioso: indo para o estacionamento
-2026-11-14 20:33:49.716;0;ocioso: indo para o estacionamento
-2026-11-14 20:33:49.802;0;modo manual
-2026-11-14 20:33:49.805;1;modo manual
-2026-11-14 20:33:50.191;-1;1 robo(s) novo(s) na frota
-2026-11-14 20:33:50.302;0;entrou na passagem P1 (para a direita)
-2026-11-14 20:33:50.605;1;esperando passagem P1 (cheia ou na contramao)
-2026-11-14 20:33:51.902;0;desviando de robo
-2026-11-14 20:33:52.102;0;saiu da passagem P1
-2026-11-14 20:33:52.105;1;entrou na passagem P1 (para a esquerda)
-2026-11-14 20:33:52.702;0;chegou ao destino
-2026-11-14 20:33:52.805;1;saiu da passagem P1
-2026-11-14 20:33:53.205;1;chegou ao destino
-2026-11-14 20:33:59.190;-1;sistema encerrado
+2026-11-15 02:14:57.423;-1;sistema iniciado
+2026-11-15 02:14:57.423;-1;mapa gerado com semente 42
+2026-11-15 02:14:57.424;0;robo criado (pid 12573) em (9,12)
+2026-11-15 02:14:57.425;1;robo criado (pid 12574) em (21,12)
+2026-11-15 02:14:57.427;-1;2 robo(s) novo(s) na frota
+2026-11-15 02:14:57.429;0;robo vivo
+2026-11-15 02:14:57.429;1;robo vivo
+2026-11-15 02:14:57.431;1;ocioso: indo para o estacionamento
+2026-11-15 02:14:57.433;0;ocioso: indo para o estacionamento
+2026-11-15 02:14:57.529;0;modo manual
+2026-11-15 02:14:57.529;1;modo manual
+2026-11-15 02:14:58.129;0;entrou na passagem P1 (para a direita)
+2026-11-15 02:14:58.431;1;esperando passagem P1 (cheia ou na contramao)
+2026-11-15 02:14:59.729;0;desviando de robo
+2026-11-15 02:14:59.929;0;saiu da passagem P1
+2026-11-15 02:14:59.930;1;entrou na passagem P1 (para a esquerda)
+2026-11-15 02:15:00.529;0;chegou ao destino
+2026-11-15 02:15:00.629;1;saiu da passagem P1
+2026-11-15 02:15:01.029;1;chegou ao destino
+2026-11-15 02:15:06.926;-1;sistema encerrado

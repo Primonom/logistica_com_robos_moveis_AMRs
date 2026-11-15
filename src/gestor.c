@@ -49,7 +49,11 @@
 
 typedef struct { int x, y; } Pedido;
 
-/* Fila circular de pedidos (só existe dentro do processo central). */
+/* Fila circular de pedidos (só existe dentro do processo central).
+ * POR QUE mutex_pedidos: Console, ponte MQTT e Gestor mexem em pedidos[],
+ * inicio e quantidade; sem ele um pedido poderia ser perdido ou lido duas
+ * vezes. POR QUE cond_pedidos: o Gestor dorme sem gastar CPU enquanto a
+ * fila está vazia e quem coloca um pedido o acorda (ver o topo). */
 static Pedido pedidos[MAX_PEDIDOS];
 static int inicio = 0;       /* posição do próximo pedido a ser lido */
 static int quantidade = 0;   /* quantos pedidos estão na fila */
@@ -57,7 +61,9 @@ static pthread_mutex_t mutex_pedidos = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  cond_pedidos  = PTHREAD_COND_INITIALIZER;
 
 /* Aviso assíncrono ao Organizador: quantos robôs foram criados desde a
- * última vez que ele olhou. */
+ * última vez que ele olhou. POR QUE mutex_novos: o Gestor incrementa e o
+ * Organizador lê e zera (threads diferentes); sem ele um incremento feito
+ * entre a leitura e o zero do Organizador se perderia. */
 static int robos_novos = 0;
 static pthread_mutex_t mutex_novos = PTHREAD_MUTEX_INITIALIZER;
 

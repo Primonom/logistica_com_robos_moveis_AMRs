@@ -1,5 +1,5 @@
 /*
- * ponte_mqtt.c — Ponte MQTT entre o núcleo em C e a Tela de Operação (Etapa 2).
+ * ponte_mqtt.c — Ponte MQTT entre o núcleo em C e a Tela de Operação.
  *
  * Threads:
  *   - tarefa_ponte_mqtt (nossa, no processo central), periódica com período
@@ -7,8 +7,8 @@
  *     "atr/status".
  *   - thread de rede da libmosquitto, criada por mosquitto_loop_start DEPOIS
  *     da primeira conexão: envia e recebe os pacotes MQTT e reconecta
- *     sozinha se o broker cair. Os callbacks (ao_conectar, ao_desconectar)
- *     rodam NELA.
+ *     sozinha se o broker cair. Os callbacks (ao_conectar, ao_receber,
+ *     ao_desconectar) rodam NELA.
  *
  * Tópicos:
  *   atr/mapa    (publica) JSON do mapa DESTA execução, gerado a partir de
@@ -26,6 +26,7 @@
  *   atr/comando (assina) uma linha de comando igual à do Console; é
  *               executada por executar_comando() (console.c) na thread de
  *               rede da biblioteca, e o resultado vai para
+ *               atr/comando/resposta (abaixo).
  *   atr/robo/novo (assina) pedido de novo robô vindo do simulador (painel
  *               "Simulação" da tela). Payload "x y" ou vazio (posição
  *               padrão). Validado com posicao_valida e entregue ao Gestor
@@ -61,9 +62,10 @@
  *   - libmosquitto: mosquitto_publish pode ser chamado desta thread, do
  *     Coletor e da thread de rede ao mesmo tempo; a biblioteca protege as
  *     filas internas dela com mutexes próprios.
- *   - "cliente" e "rede_iniciada" são globais deste arquivo, mas sem mutex:
- *     "cliente" é escrito só em ponte_criar(), antes de existirem as outras
- *     threads (pthread_create garante que elas veem o valor), e só é
+ *   - "cliente", "broker_endereco" e "rede_iniciada" são globais deste
+ *     arquivo, mas sem mutex: "cliente" e "broker_endereco" são escritos só
+ *     em ponte_criar(), antes de existirem as outras threads
+ *     (pthread_create garante que elas veem o valor); "cliente" só é
  *     destruído depois de todas terminarem; "rede_iniciada" é escrito só
  *     pela thread da ponte e lido pelo main depois do pthread_join dela.
  *   - Comandos recebidos: executar_comando() é segura para ser chamada ao

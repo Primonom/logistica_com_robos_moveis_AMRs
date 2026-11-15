@@ -36,7 +36,10 @@
 #include "comum.h"
 #include "mapa.h"
 
-/* Variáveis globais deste processo (declaradas em comum.h). */
+/* Variáveis globais deste processo (declaradas em comum.h).
+ * POR QUE sem mutex: são escritas uma vez aqui no main, ANTES de criar as
+ * threads, e depois só lidas (pthread_create garante que as threads veem
+ * os valores). O que elas apontam tem a sua própria sincronização. */
 MemoriaCompartilhada *mem;
 mqd_t fila_coletor;
 
